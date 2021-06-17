@@ -3,10 +3,11 @@ project(prism)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(BUILD_ARGS "-v" "-w" "dupbuild=warn") 
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(PRISM_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/external/)
+
+set(BUILD_ARGS "-v" "-w" "dupbuild=warn")
 
 include(PrismDependencies)
 
