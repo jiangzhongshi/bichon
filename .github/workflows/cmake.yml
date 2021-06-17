@@ -13,7 +13,7 @@ env:
 
 jobs:
   Unix:
-    name: ${{ matrix.name }} (${{ matrix.config }}, Static=${{ matrix.static }})
+    name: ${{ matrix.name }} (${{ matrix.config }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -142,11 +142,9 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake -GNinja^
+          cmake ^
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} ^
             -B build ^
             -S .
-          cd build
-          dir
-          ninja -j1
+          cmake --build build --target cumin_bin
