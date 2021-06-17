@@ -1,0 +1,152 @@
+name: CMake
+
+on:
+  push:
+    branches:
+      - main
+      - bichon
+
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  Unix:
+    name: ${{ matrix.name }} (${{ matrix.config }}, Static=${{ matrix.static }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [
+          ubuntu-18.04-gcc-9,
+          macOS-latest,
+        ]
+        config: [Release]
+        include:
+          - name: ubuntu-18.04-gcc-9
+            os: ubuntu-18.04
+            compiler: gcc
+            version: "9"
+          - name: macOS-latest
+            os: macOS-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Checkout repository
+      uses: actions/checkout@v1
+      with:
+        fetch-depth: 10
+
+    - name: Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+          sudo apt-get update
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            sudo apt-get install -y g++-${{ matrix.version }}
+            echo "CC=gcc-${{ matrix.version }}" >> $GITHUB_ENV
+            echo "CXX=g++-${{ matrix.version }}" >> $GITHUB_ENV
+          else
+            sudo apt-get install -y clang-${{ matrix.version }}
+            echo "CC=clang-${{ matrix.version }}" >> $GITHUB_ENV
+            echo "CXX=clang++-${{ matrix.version }}" >> $GITHUB_ENV
+          fi
+          sudo apt-get install \
+            libblas-dev \
+            libboost-filesystem-dev \
+            libboost-system-dev \
+            libboost-thread-dev \
+            liblapack-dev \
+            libmpfr-dev \
+            libhdf5-dev
+
+    - name: Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install boost gmp mpfr hdf5
+
+    - name: Create Build Environment
+      # Some projects don't allow in-source building, so create a separate build directory
+      # We'll use this as our working directory for all subsequent commands
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure CMake
+      # Use a bash shell so we can use the same syntax for environment variable
+      # access regardless of the host operating system
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      # Note the current convention is to use the -S and -B options here to specify source 
+      # and build directories, but this is only available with CMake 3.13 and higher.  
+      # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
+      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+    - name: Build
+      working-directory: ${{runner.workspace}}/build
+      shell: bash
+      # Execute the build.  You can specify a specific target with "--target <NAME>"
+      run: cmake --build . --config $BUILD_TYPE --target cumin_bin
+
+
+  ####################
+  # Windows
+  ####################
+
+  Windows:
+    name: Windows (${{ matrix.config }})
+    runs-on: windows-2019
+    env:
+      CC: cl.exe
+      CXX: cl.exe
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Release]
+    steps:
+      - name: Stetup Conda
+        uses: conda-incubator/setup-miniconda@v2
+
+      - name: Install Dependencies
+        shell: powershell
+        run: |
+          conda install -c conda-forge mpfr hdf5 boost-cpp -y
+      
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 10
+      - uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Set env
+        run: |
+          echo "appdata=$env:LOCALAPPDATA" >> ${env:GITHUB_ENV}
+          echo "GMP_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
+          echo "MPFR_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
+          echo "GMP_LIB=C:\Miniconda\Library\lib" >> ${env:GITHUB_ENV}
+
+      - name: Cache build
+        id: cache-build
+        uses: actions/cache@v1
+        with:
+          path: ${{ env.appdata }}\Mozilla\sccache
+          key: ${{ runner.os }}-${{ matrix.config }}-${{ matrix.static }}-cache
+
+      - name: Prepare sccache
+        run: |
+          Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+          scoop install sccache --global
+          # Scoop modifies the PATH so we make it available for the next steps of the job
+          echo "${env:PATH}" >> ${env:GITHUB_PATH}
+        # We run configure + build in the same step, since they both need to call VsDevCmd
+        # Also, cmd uses ^ to break commands into multiple lines (in powershell this is `)
+      - name: Configure and build
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+          cmake ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} ^
+            -B build ^
+            -S .
+          cd build
+          dir
+          ninja -j1
