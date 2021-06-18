@@ -13,10 +13,13 @@ Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Pano
 	- Distance Bound.
 	- Feature Preserving.
 	- Bijective High-order Surface to the input. 
+
 ## News
 - 📰 06/17/2021: First version of Bichon code is released!
+
 ## Tips
 - 📌 
+
 ## Dataset
 🎊 We provide generated high order tetrahedral meshes and their surface for 
 futher research and developement.
