@@ -123,11 +123,11 @@ TEST_CASE("cute-collapse-edit") {
   // prism::curve::edge_swapping( lagr, p4T, 1e2);
     for (int pass = 1; pass <= 6; pass++) {
     spdlog::info("======== Optimization Pass {}/{} ========", pass, 6);
-    auto col = prism::curve::tetrahedral_opt_collapse(lagr, p4T, 100);
+    auto col = prism::curve::cutet_collapse(lagr, p4T, 100);
     // CHECK_EQ(col, 281);
 
     spdlog::set_level(spdlog::level::info);
-    auto swa = prism::curve::tetrahedral_opt_swap(lagr, p4T, 100);
+    auto swa = prism::curve::cutet_swap(lagr, p4T, 100);
     // CHECK_EQ(swa, 46);
 
     prism::curve::vertex_star_smooth(lagr, p4T, 3, 1);
