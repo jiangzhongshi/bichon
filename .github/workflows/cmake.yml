@@ -91,7 +91,7 @@ jobs:
       shell: bash
       run: | 
           wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off
-          ./cumin_bin -i bunny.off -o ./ --shell-target_edge_length 1.0
+          ./cumin_bin -i bunny.off -o ./
 
 
   ####################

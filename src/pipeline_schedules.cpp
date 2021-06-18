@@ -531,6 +531,7 @@ void feature_and_curve(std::string filename, std::string fgname,
             for (auto k = 0; k < 3; k++) pos += V.row(f[k]) * bc[k];
             return pos;
           };
+          if (points_fid.size() == 0) return;
           std::vector<std::vector<int>> face_map(oF.rows());
           for (auto i = 0; i < face_parent.size(); i++)
             face_map[face_parent[i]].push_back(i);
