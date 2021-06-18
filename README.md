@@ -1,12 +1,12 @@
-# Bijective and Coarse High-Order Tetrahdedral Meshes
+# Bijective and Coarse High-Order Tetrahedral Meshes
 Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Panozzo. 
 *ACM Transactions on Graphics (SIGGRAPH 2021)*
 
-[:tv: Talk (YouTube)](https://youtu.be/yfztQw78gnE), [:memo: Paper](https://cs.nyu.edu/~zhongshi/files/bichon_preview.pdf)
+[📺 Talk (YouTube)](https://youtu.be/yfztQw78gnE), [📝 Paper](https://cs.nyu.edu/~zhongshi/files/bichon_preview.pdf)
 ## TL;DR
-- :triangular_ruler: Input: Manifold and watertight triangle mesh, without self intersections.
+- 📐 Input: Manifold and watertight triangle mesh, without self intersections.
 	- Optional: Constraint Points and Feature Tagging.
-- :curly_loop: Output: High Order (Bezier) Tetrahedral Mesh
+- ➰ Output: High Order (Bezier) Tetrahedral Mesh
 	- Coarsened.
 	- Valid (non-flip) Elements.
 	- No Intersection.
@@ -14,7 +14,7 @@ Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Pano
 	- Feature Preserving.
 	- Bijective High-order Surface to the input. 
 ## News
-- :newspaper: 06/17/2021: First version of Bichon code is released!
+- 📰 06/17/2021: First version of Bichon code is released!
 ## Tips
 - 📌 
 ## Dataset
