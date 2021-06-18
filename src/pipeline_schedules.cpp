@@ -422,10 +422,7 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   RowMati p4T;
 
   prism::curve::stitch_surface_to_volume(
-      mB, mT, mF, complete_cp,
-      std::tuple(elevlag_from_bern, TRI_CODEC.at(helper.tri_order + 1),
-                 TET_CODEC.at(helper.tri_order + 1), vec_dxyz),
-      Vmsh, Tmsh, nodes, p4T);
+      mB, mT, mF, complete_cp, Vmsh, Tmsh, nodes, p4T);
 
   cutet_optim(nodes, p4T, config["cutet"]);
 };
@@ -590,7 +587,7 @@ void feature_and_curve(std::string filename, std::string fgname,
       complete_cp.size() != pc->F.size()) {
     spdlog::info("order {} Reset CP", order);
     complete_cp =
-        prism::curve::initialize_cp(pc->mid, pc->F, TRI_CODEC.at(order));
+        prism::curve::initialize_cp(pc->mid, pc->F, codecs_gen_id(order,2));
   }
   if (pc->ref.inpV.rows() == 0) {
     spdlog::info("resetting inpV");

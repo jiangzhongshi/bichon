@@ -14,8 +14,6 @@ namespace prism::curve {
     bool stitch_surface_to_volume(
     const RowMatd &base, const RowMatd &top, const RowMati &F_sh,
     const std::vector<RowMatd> &complete_cp,
-    const std::tuple<const RowMatd &, const RowMati &, const RowMati &,
-                     const std::vector<RowMatd> &> &mat_helpers,
     const Eigen::MatrixXd &Vmsh, const Eigen::MatrixXi &Tmsh,
     RowMatd& output_nodes, RowMati& p4T);
 }

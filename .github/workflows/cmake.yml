@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - bichon
+      - fix-ci
 
 
 env:
@@ -13,7 +13,7 @@ env:
 
 jobs:
   Unix:
-    name: ${{ matrix.name }} (${{ matrix.config }}, Static=${{ matrix.static }})
+    name: ${{ matrix.name }} (${{ matrix.config }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,11 +59,12 @@ jobs:
             libboost-thread-dev \
             liblapack-dev \
             libmpfr-dev \
-            libhdf5-dev
+            libhdf5-dev \
+            wget
 
     - name: Dependencies (macOS)
       if: runner.os == 'macOS'
-      run: brew install boost gmp mpfr hdf5
+      run: brew install boost gmp mpfr hdf5 wget
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
@@ -85,68 +86,72 @@ jobs:
       shell: bash
       # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: cmake --build . --config $BUILD_TYPE --target cumin_bin
+    - name: Test
+      working-directory: ${{runner.workspace}}/build
+      shell: bash
+      run: | 
+          wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off
+          ./cumin_bin -i bunny.off -o ./ --shell-target_edge_length 1.0
 
 
   ####################
   # Windows
   ####################
 
-  Windows:
-    name: Windows (${{ matrix.config }})
-    runs-on: windows-2019
-    env:
-      CC: cl.exe
-      CXX: cl.exe
-    strategy:
-      fail-fast: false
-      matrix:
-        config: [Release]
-    steps:
-      - name: Stetup Conda
-        uses: conda-incubator/setup-miniconda@v2
+  # Windows:
+  #   name: Windows (${{ matrix.config }})
+  #   runs-on: windows-2019
+  #   env:
+  #     CC: cl.exe
+  #     CXX: cl.exe
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       config: [Release]
+  #   steps:
+  #     - name: Stetup Conda
+  #       uses: conda-incubator/setup-miniconda@v2
 
-      - name: Install Dependencies
-        shell: powershell
-        run: |
-          conda install -c conda-forge mpfr hdf5 boost-cpp -y
+  #     - name: Install Dependencies
+  #       shell: powershell
+  #       run: |
+  #         conda install -c conda-forge mpfr hdf5 boost-cpp -y
       
-      - name: Checkout repository
-        uses: actions/checkout@v1
-        with:
-          fetch-depth: 10
-      - uses: seanmiddleditch/gha-setup-ninja@master
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v1
+  #       with:
+  #         fetch-depth: 10
+  #     - uses: seanmiddleditch/gha-setup-ninja@master
 
-      - name: Set env
-        run: |
-          echo "appdata=$env:LOCALAPPDATA" >> ${env:GITHUB_ENV}
-          echo "GMP_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
-          echo "MPFR_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
-          echo "GMP_LIB=C:\Miniconda\Library\lib" >> ${env:GITHUB_ENV}
+  #     - name: Set env
+  #       run: |
+  #         echo "appdata=$env:LOCALAPPDATA" >> ${env:GITHUB_ENV}
+  #         echo "GMP_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
+  #         echo "MPFR_INC=C:\Miniconda\Library\include" >> ${env:GITHUB_ENV}
+  #         echo "GMP_LIB=C:\Miniconda\Library\lib" >> ${env:GITHUB_ENV}
 
-      - name: Cache build
-        id: cache-build
-        uses: actions/cache@v1
-        with:
-          path: ${{ env.appdata }}\Mozilla\sccache
-          key: ${{ runner.os }}-${{ matrix.config }}-${{ matrix.static }}-cache
+  #     - name: Cache build
+  #       id: cache-build
+  #       uses: actions/cache@v1
+  #       with:
+  #         path: ${{ env.appdata }}\Mozilla\sccache
+  #         key: ${{ runner.os }}-${{ matrix.config }}-${{ matrix.static }}-cache
 
-      - name: Prepare sccache
-        run: |
-          Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
-          scoop install sccache --global
-          # Scoop modifies the PATH so we make it available for the next steps of the job
-          echo "${env:PATH}" >> ${env:GITHUB_PATH}
-        # We run configure + build in the same step, since they both need to call VsDevCmd
-        # Also, cmd uses ^ to break commands into multiple lines (in powershell this is `)
-      - name: Configure and build
-        shell: cmd
-        run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake ^
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
-            -DCMAKE_BUILD_TYPE=${{ matrix.config }} ^
-            -B build ^
-            -S .
-          cd build
-          dir
-          ninja -j1
+  #     - name: Prepare sccache
+  #       run: |
+  #         Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+  #         scoop install sccache --global
+  #         # Scoop modifies the PATH so we make it available for the next steps of the job
+  #         echo "${env:PATH}" >> ${env:GITHUB_PATH}
+  #       # We run configure + build in the same step, since they both need to call VsDevCmd
+  #       # Also, cmd uses ^ to break commands into multiple lines (in powershell this is `)
+  #     - name: Configure and build
+  #       shell: cmd
+  #       run: |
+  #         call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+  #         cmake ^
+  #           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+  #           -DCMAKE_BUILD_TYPE=${{ matrix.config }} ^
+  #           -B build ^
+  #           -S .
+  #         cmake --build build --target cumin_bin

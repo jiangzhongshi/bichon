@@ -235,8 +235,10 @@ constexpr auto valid_curving =
   prism::geogram::AABB &reftree = *pc.ref.aabb;
 
   auto &[inpV, inpF, refVN, refHN, refVF] = refData;
-  const auto &[tri3_cod, tri4_cod, elevlag_from_bern, tri3_lv5, tri3_duv_lv5,
-               tet4_cod, vec_dxyz, upsample_helper] = mat_helpers;
+  const auto &[tri3_cod, tri4_cod, tet4_cod] = mat_helpers;
+  auto & helper = prism::curve::magic_matrices();
+  auto &tri3_lv5 = helper.bern_val_samples;
+  auto &tri3_duv_lv5 = helper.duv_samples;
   if (!option.linear_curve) {
     // 1. fitting
     // get foot points (as f,u,v)
@@ -374,15 +376,12 @@ prism::curve::curve_func_handles(std::vector<RowMatd> &complete_cp,
   auto codecs_tri = codecs_gen(tri_order, 2);
   auto tri_codec_v = RowMati();
   vec2eigen(codecs_tri, tri_codec_v);
-
   
   auto pre_curving =
       [&complete_cp, // complete cp is an actual input in this list
-       tri10_lv5 = helper.bern_val_samples, tri3_cod = TRI_CODEC.at(tri_order),
-       tri4_cod = TRI_CODEC.at(tet_order), tet4_cod = TET_CODEC.at(tet_order),
-       tri_codec_v = tri_codec_v, vec_dxyz = helper.volume_data.vec_dxyz,
-       elevlag_from_bern = helper.elev_lag_from_bern, duv_lv5 = helper.duv_samples, refVN,
-       refVF = VF, inpV = pc.ref.inpV, inpF, upsample_helper = helper.upsample_data,
+       tri3_cod = codecs_gen_id(tri_order,2),
+       tri4_cod = codecs_gen_id(tet_order,2), tet4_cod = codecs_gen_id(tet_order,3),
+       tri_codec_v, refVN, refVF = VF, inpV = pc.ref.inpV, inpF,
        poisson_on_face = pc.constraints_per_face, poisson_uv=pc.constraints_points_bc, &option]
       // end of the long capture list
       (const PrismCage &pc, const std::vector<int> &old_nb,
@@ -542,8 +541,7 @@ prism::curve::curve_func_handles(std::vector<RowMatd> &complete_cp,
     bool flag = valid_curving(
         pc, old_nb, moved_tris,
         std::forward_as_tuple(inpV, inpF, refVN, RowMatd(), refVF), bnd_cp_maps,
-        std::forward_as_tuple(tri3_cod, tri4_cod, elevlag_from_bern, tri10_lv5,
-                              duv_lv5, tet4_cod, vec_dxyz, upsample_helper),
+        std::forward_as_tuple(tri3_cod, tri4_cod, tet4_cod),
         residual_test, option, local_cp);
     if (!flag) {
       local_cp.clear();
