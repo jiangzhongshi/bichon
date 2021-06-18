@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
                      {"normal_threshold", -1.0},
                      {"recursive_check", true}};
   config["shell"] = {{"initial_thickness", 1e-2},
-                     {"target_edge_length", 5e-2},
+                     {"target_edge_length", 1e-1},
                      {"distortion_bound", 0.01},
                      {"target_thickness", 5e-2}};
   config["feature"] = {
