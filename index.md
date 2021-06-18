@@ -2,11 +2,11 @@
 Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Panozzo. 
 *ACM Transactions on Graphics (SIGGRAPH 2021)*
 
-[:tv: Talk (YouTube)](https://youtu.be/yfztQw78gnE), [:memo: Paper](https://cs.nyu.edu/~zhongshi/files/bichon_preview.pdf)
+[📺 Talk (YouTube)](https://youtu.be/yfztQw78gnE), [📝 Paper](https://cs.nyu.edu/~zhongshi/files/bichon_preview.pdf)
 ## TL;DR
-- :triangular_ruler: Input: Manifold and watertight triangle mesh, without self intersections.
+- 📐 Input: Manifold and watertight triangle mesh, without self intersections.
 	- Optional: Constraint Points and Feature Tagging.
-- :curly_loop: Output: High Order (Bezier) Tetrahedral Mesh
+- ➰ Output: High Order (Bezier) Tetrahedral Mesh
 	- Coarsened.
 	- Valid (non-flip) Elements.
 	- No Intersection.
@@ -14,16 +14,16 @@ Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Pano
 	- Feature Preserving.
 	- Bijective High-order Surface to the input. 
 ## News
-- :newspaper: 06/17/2021: First version of Bichon code is released!
+- 📰 06/17/2021: First version of Bichon code is released!
 ## Tips
 - 📌 
 ## Dataset
-:confetti_ball: We provide generated high order tetrahedral meshes and their surface for 
+🎊 We provide generated high order tetrahedral meshes and their surface for 
 futher research and developement.
 - [Quartic Tetrahedral Meshes (.msh)](https://drive.google.com/file/d/1Gw3vza0GkY0pMf4kLcrOzQeCIlbEp4Cs/view?usp=sharing)
 
 ## Installation via CMake [![CMake](https://github.com/jiangzhongshi/bichon/actions/workflows/cmake.yml/badge.svg)](https://github.com/jiangzhongshi/bichon/actions/workflows/cmake.yml)
-Our system is developed in a Linux environment, with GCC-9 and Clang-12, and is tested on macOS and ~~Windows~~ (TODO). 
+Our system is developed in a Linux 🐧 environment, with GCC-9 and Clang-12, and is tested on macOS 🍏 and ~~Windows~~ (TODO). 
 Please refer to [cmake.yml](.github/workflows/cmake.yml) for a more detailed setup.
 
 ```bash
