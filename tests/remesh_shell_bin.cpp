@@ -47,7 +47,7 @@ TEST_CASE("cumin collapse") {
   double dist_th = 1e-2;
   spdlog::info("order {}", order);
   auto complete_cp =
-      prism::curve::initialize_cp(pc.mid, pc.F, TRI_CODEC.at(order));
+      prism::curve::initialize_cp(pc.mid, pc.F, codecs_gen_id(order, 2));
 
   for (int i = 0; i < 10; i++) {
     prism::local::wildcollapse_pass(pc, option);

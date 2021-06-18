@@ -258,8 +258,8 @@ bool elevated_positive(
   auto helper = prism::curve::magic_matrices();
   auto & tri15lag_from_tri10bern = helper.elev_lag_from_bern;
   auto& dxyz = helper.volume_data.vec_dxyz;
-  auto tri4_cod = TRI_CODEC.at(helper.tri_order + 1);
-  auto tet4_cod = TET_CODEC.at(helper.tri_order + 1);
+  auto tri4_cod = codecs_gen_id(helper.tri_order + 1, 2);
+  auto tet4_cod = codecs_gen_id(helper.tri_order + 1, 3);
   assert(tri15lag_from_tri10bern.rows() !=
          tri15lag_from_tri10bern.cols());  // switch to single test
   for (int i = 0; i < nbF.size(); i++) {
@@ -670,18 +670,18 @@ void prism::curve::HelperTensors::init(int tri_order, int level) {
   RowMatd tri10_lv5, tri15lag_from_tri10bern, lag_from_bern;
   std::array<RowMatd, 2> duv_lv5;
   std::vector<RowMatd> vec_dxyz;
-  {
-    H5Easy::File file(
+  try {
+    H5Easy::File file0(
         fmt::format("{}/tri_o{}_lv{}.h5", data_path, tri_order, level),
         H5Easy::File::ReadOnly);
-    tri10_lv5 = H5Easy::load<RowMatd>(file, "bern");
+    tri10_lv5 = H5Easy::load<RowMatd>(file0, "bern");
     tri15lag_from_tri10bern =
-        H5Easy::load<RowMatd>(file, "bern2elevlag").transpose();
-    lag_from_bern = H5Easy::load<RowMatd>(file, "bern2lag").transpose();
-    duv_lv5[0] = H5Easy::load<RowMatd>(file, "deri_u");  // (sample) 45 x 10
-    duv_lv5[1] = H5Easy::load<RowMatd>(file, "deri_v");
-  }
-  {
+        H5Easy::load<RowMatd>(file0, "bern2elevlag").transpose();
+    lag_from_bern = H5Easy::load<RowMatd>(file0, "bern2lag").transpose();
+    duv_lv5[0] = H5Easy::load<RowMatd>(file0, "deri_u");  // (sample) 45 x 10
+    duv_lv5[1] = H5Easy::load<RowMatd>(file0, "deri_v");
+  // }
+  // {
     H5Easy::File file(
         fmt::format("{}/p{}_quniform5_dxyz.h5", data_path, tri_order + 1),
         H5Easy::File::ReadOnly);
@@ -693,6 +693,12 @@ void prism::curve::HelperTensors::init(int tri_order, int level) {
         for (auto i2 = 0; i2 < tet4_dxyz[0][0].size(); i2++)
           vec_dxyz[i1](i0, i2) = tet4_dxyz[i0][i1][i2];
     }
+  } catch (HighFive::Exception& e){
+     spdlog::critical(e.what());
+     spdlog::critical("The file for (high order) helper matrices are not present. \
+     Try to use `python/cumin_datagen.py` to generate them for higher order meshes. \
+      Program Aborting!");
+      exit(1);
   }
   RowMatd bern_from_lagr_o9, bern_from_lagr_o4;
   RowMati codecs_o4_bc, codecs_o9_bc;

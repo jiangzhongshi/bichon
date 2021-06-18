@@ -32,8 +32,5 @@ TEST_CASE("stitch-surface") {
 
   RowMatd nodes;
   RowMati p4T;
-  prism::curve::stitch_surface_to_volume(
-      mB, mT, mF, cp,
-      std::tuple(elevlag_from_bern, TRI_CODEC.at(4), TET_CODEC.at(4), vec_dxyz),
-      V, T, nodes, p4T);
+  prism::curve::stitch_surface_to_volume(mB, mT, mF, cp, V, T, nodes, p4T);
 }

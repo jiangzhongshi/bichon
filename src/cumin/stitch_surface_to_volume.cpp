@@ -9,8 +9,6 @@
 bool prism::curve::stitch_surface_to_volume(
     const RowMatd &base, const RowMatd &top, const RowMati &F_sh,
     const std::vector<RowMatd> &complete_cp,
-    const std::tuple<const RowMatd &, const RowMati &, const RowMati &,
-                     const std::vector<RowMatd> &> &mat_helpers,
     const Eigen::MatrixXd &Vmsh, const Eigen::MatrixXi &Tmsh,
     RowMatd &final_nodes, RowMati &p4T) {
   for (auto i = 0; i < base.rows(); i++) {
@@ -24,8 +22,8 @@ bool prism::curve::stitch_surface_to_volume(
   auto &helper = prism::curve::magic_matrices();
   auto &tri15lag_from_tri10bern = helper.elev_lag_from_bern;
   auto &dxyz = helper.volume_data.vec_dxyz;
-  auto tri4_cod = TRI_CODEC.at(helper.tri_order + 1);
-  auto tet4_cod = TET_CODEC.at(helper.tri_order + 1);
+  auto tri4_cod = codecs_gen_id(helper.tri_order + 1,2 );
+  auto tet4_cod = codecs_gen_id(helper.tri_order + 1,3);
   assert(tri15lag_from_tri10bern.rows() !=
          tri15lag_from_tri10bern.cols());  // switch to single test
   std::vector<Eigen::VectorXi> all_tuples;
