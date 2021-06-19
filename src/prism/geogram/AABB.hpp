@@ -2,6 +2,7 @@
 #define PRISM_CGAL_AABB_HPP
 
 #include <memory>
+#include <optional>
 #include <prism/common.hpp>
 
 namespace GEO {

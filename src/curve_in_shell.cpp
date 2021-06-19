@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
       ->required()
       ->check(CLI::ExistingFile)
       ->each([&filename](const std::string &s) {
-        filename = std::filesystem::path(s).filename();
+        filename = std::filesystem::path(s).filename().string();
       });
   program.add_option("-g,--graph", feature_graph_file, "feature graph .fgraph");
   program.add_option("-o,--output", output_dir, "output dir")
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
   dict_to_option(config, program);
 
   program.callback([&]() {
-    filename = std::filesystem::path(input_file).filename();
+    filename = std::filesystem::path(input_file).filename().string();
     if (log_dir != "") {
       auto file_logger = spdlog::basic_logger_mt(
           "cumin", log_dir + "/" + filename + suffix + ".log");

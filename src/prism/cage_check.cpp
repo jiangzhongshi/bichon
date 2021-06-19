@@ -4,7 +4,7 @@
 #include <igl/triangle_triangle_adjacency.h>
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/spdlog.h>
-
+#include <optional>
 #include <highfive/H5Easy.hpp>
 
 #include "PrismCage.hpp"

@@ -44,7 +44,7 @@ PRIVATE
 
 target_compile_definitions(prism_library PUBLIC CGAL_QP)
 target_compile_features(prism_library PUBLIC cxx_std_17)
-target_link_libraries(prism_library PUBLIC spdlog::spdlog igl::core osqp highfive geogram mitsuba_autodiff igl::cgal)
+target_link_libraries(prism_library PUBLIC spdlog::spdlog igl::core osqpstatic highfive geogram mitsuba_autodiff igl::cgal)
 target_include_directories(prism_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/)
 set_target_properties(prism_library PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(prism::prism ALIAS prism_library)
