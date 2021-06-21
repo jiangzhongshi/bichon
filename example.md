@@ -1,6 +1,6 @@
 ---
 title: example
-layout: template
+layout: jekyll-theme-minimal
 filename: example.md
 --- 
 
