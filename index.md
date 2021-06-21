@@ -1,9 +1,3 @@
----
-title: Index
-layout: jekyll-theme-minimal
-filename: index.md
---- 
-
 # Bijective and Coarse High-Order Tetrahedral Meshes
 Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Panozzo. 
 *ACM Transactions on Graphics (SIGGRAPH 2021)*
