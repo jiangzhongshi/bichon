@@ -1,6 +1,6 @@
 ---
 title: Index
-layout: template
+layout: jekyll-theme-minimal
 filename: index.md
 --- 
 
