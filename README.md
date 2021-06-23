@@ -8,7 +8,7 @@ Zhongshi Jiang, Ziyi Zhang, Yixin Hu, Teseo Schneider, Denis Zorin, Daniele Pano
 	- Optional: Constraint Points and Feature Tagging.
 - ➰ Output: High Order (Bezier) Tetrahedral Mesh
 	- Coarsened.
-	- Valid (non-flip) Elements.
+	- Valid (non-flip) Elements. No need to untangle.
 	- No Intersection.
 	- Distance Bound.
 	- Feature Preserving.
@@ -55,7 +55,10 @@ Additionally, the following fields are useful in other cases.
 - `mV`,`mbase`,`mtop`, `mF` encode the internal shell structure.
 
 Our internal ordering of the node (inside each high order element) is generated recursively ([tuple_gen](python/curve/fem_generator.py:L86)).
-Conversion convention to GMSH (`triangle6`, `triangle10`, `triangle15`,`tetra20`, `tetra35`) is manually coded in the same file. Further conversion is still on the way and PRs are welcome.
+Conversion convention to GMSH (`triangle6`, `triangle10`, `triangle15`,`tetra20`, `tetra35`) is manually coded in the same file. 
+
+Right now, the conversion of curved tetrahedral mesh from our `.h5` format to gmsh `.msh` format can be done with [format_utils.py](python/format_utils.py).
+Further conversion is still on the way and PRs are welcome.
 ### Command Line Usage
 ```bash
 ./cumin_bin -i INPUT_MESH -o OUTPUT_FOLDER/
@@ -76,9 +79,17 @@ Options:
 ```
 
 ## Visualization
+We recommend visualize the high order meshes with jupyterlab and `meshplot`.
 
-
-`python/` folder contains several scripts to visualize or convert our serialization file.
+`python/` folder contains several scripts to visualize or convert our serialization file. And the following snippet is usually used in jupyter notebook for inspecting the high order surface mesh.
+```python
+import meshplot as mp
+from vis_utils import h5reader, highorder_sv
+F, cp = h5reader('bunny.off.h5', 'mF','complete_cp')
+hV, hF, hE = highorder_sv(cp)
+p = mp.plot(hV.reshape(-1,3), hF, shading=dict(wireframe=False))
+p.add_edges(hV.reshape(-1,3), hE)
+```
 
 ## Examples
 
@@ -86,5 +97,5 @@ Options:
 The source code in this repository is released under MIT License. However, be aware that several dependencies (notably, CGAL with GPLv3) have differing licenses.
 
 ## Nerd Corner
-- If you are interesting in our algorithm,
+- If you are interested in our algorithm,
 please refer to the papers [Bijective and Coarse High-Order Tetrahedral Meshes](https://cs.nyu.edu/~zhongshi/files/bichon_preview.pdf), and its successor [Bijective Projection in a Shell](https://dl.acm.org/doi/abs/10.1145/3414685.3417769).
