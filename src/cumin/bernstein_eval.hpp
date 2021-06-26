@@ -13,7 +13,7 @@ Eigen::ArrayXXd evaluate_bernstein(const Eigen::VectorXd& X,
 //
 //
 // vector of 3: (number of basis) by (number of samples)
-std::vector<Eigen::ArrayXXd> evaluate_bernstein_derivative(
+std::array<Eigen::ArrayXXd,3> evaluate_bernstein_derivative(
     const Eigen::VectorXd& X, const Eigen::VectorXd& Y,
     const Eigen::VectorXd& Z, const RowMati& short_codecs);
 }  // namespace prism::curve

@@ -96,16 +96,23 @@ bool prism::curve::tetrahedron_inversion_check(const RowMatd& cp) {
 
 bool prism::curve::tetrahedron_inversion_check(
     const RowMatd& cp, const Eigen::Matrix<int, -1, 4>& codecs_o4,
-    const Eigen::Matrix<int, -1, 4>& codecs_o9, const RowMatd& bern_from_lagr_o4,
-    const RowMatd& bern_from_lagr_o9) {
+    const Eigen::Matrix<int, -1, 4>& codecs_o9,
+    const RowMatd& bern_from_lagr_o4, const RowMatd& bern_from_lagr_o9) {
+  // ANCHOR: this function is 50% of the profile bottleneck.
   int order = codecs_o4(0, 0);
   int high_order = codecs_o9(0, 0);
   assert(high_order == (order - 1) * 3);
-  // 3v x 35b x 220s
-  auto r1 = prism::curve::evaluate_bernstein_derivative(
-      codecs_o9.col(1).cast<double>() / high_order,
-      codecs_o9.col(2).cast<double>() / high_order,
-      codecs_o9.col(3).cast<double>() / high_order, codecs_o4);
+  auto& helper = prism::curve::magic_matrices();
+  if (helper.inversion_helper.cache != high_order) { // TODO: potential not thread-safe
+    // 3v x 35b x 220s
+    helper.inversion_helper.bernstein_derivatives_checker =
+        prism::curve::evaluate_bernstein_derivative(
+            codecs_o9.col(1).cast<double>() / high_order,
+            codecs_o9.col(2).cast<double>() / high_order,
+            codecs_o9.col(3).cast<double>() / high_order, codecs_o4);
+    helper.inversion_helper.cache = high_order;
+  }
+  auto& r1 = helper.inversion_helper.bernstein_derivatives_checker;
 
   RowMatd b_cp = bern_from_lagr_o4 * cp;
   // 3v x 220s x 3d

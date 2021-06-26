@@ -26,7 +26,12 @@ struct HelperTensors {
     std::vector<RowMatd> vec_dxyz;
     RowMatd vol_bern_from_lagr, vol_jac_bern_from_lagr;
     Eigen::Matrix<int, -1, 4> vol_codec, vol_jac_codec;
+    
   } volume_data;
+  struct InversionHelp {
+    int cache = -1;
+    std::array<Eigen::ArrayXXd, 3> bernstein_derivatives_checker;
+  } inversion_helper;
   int tri_order = 3;
   int level = 3;
   struct UpsampleData {

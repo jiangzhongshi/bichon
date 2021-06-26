@@ -13,7 +13,8 @@ auto factorial = [](int n) {
   assert(res > 0);
   return res;
 };
-auto multinomial_gen = [](auto order, const RowMati& short_codecs) {
+
+std::vector<int> multinomial_gen(int order, const RowMati& short_codecs) {
   std::vector<int> multinomial;
   auto faco = factorial(order);
   for (int i = 0; i < short_codecs.rows(); i++) {
@@ -26,7 +27,7 @@ auto multinomial_gen = [](auto order, const RowMati& short_codecs) {
   return std::move(multinomial);
 };
 
-auto precompute_powers = [](auto order, auto& X, auto& Y, auto& Z) {
+std::vector<Eigen::ArrayX4d> precompute_powers(int order, const Eigen::VectorXd& X, const Eigen::VectorXd& Y, const Eigen::VectorXd& Z) {
   std::vector<Eigen::ArrayX4d> stored_powers(order + 1);
   stored_powers[0] = Eigen::ArrayX4d::Ones(X.size(), 4);
   stored_powers[1] = Eigen::ArrayX4d::Ones(X.size(), 4);
@@ -38,7 +39,8 @@ auto precompute_powers = [](auto order, auto& X, auto& Y, auto& Z) {
     stored_powers[i] = stored_powers[i - 1] * stored_powers[1];
   }
   return std::move(stored_powers);
-};
+}
+
 Eigen::ArrayXXd prism::curve::evaluate_bernstein(const Eigen::VectorXd& X,
                                                  const Eigen::VectorXd& Y,
                                                  const Eigen::VectorXd& Z,
@@ -63,16 +65,16 @@ Eigen::ArrayXXd prism::curve::evaluate_bernstein(const Eigen::VectorXd& X,
   return res;
 }
 
-std::vector<Eigen::ArrayXXd> prism::curve::evaluate_bernstein_derivative(
+std::array<Eigen::ArrayXXd,3> prism::curve::evaluate_bernstein_derivative(
     const Eigen::VectorXd& X, const Eigen::VectorXd& Y,
     const Eigen::VectorXd& Z, const RowMati& short_codecs) {
-  assert(short_codecs.cols() == 4 && "use the fixed length version of codec");
+  assert(short_codecs.cols() == 4 && "use the fixed length bc version of codec");
   int order = short_codecs.maxCoeff();
   auto multinomial = multinomial_gen(order, short_codecs);
 
   auto stored_powers = precompute_powers(order, X, Y, Z);
 
-  std::vector<Eigen::ArrayXXd> dxdydz(3);
+  std::array<Eigen::ArrayXXd, 3> dxdydz;
   double debug_sum = 0;
   for (auto d = 0; d < 3; d++) {
     dxdydz[d].resize(multinomial.size(), X.size());
@@ -80,7 +82,7 @@ std::vector<Eigen::ArrayXXd> prism::curve::evaluate_bernstein_derivative(
       auto mn = multinomial[ci];
       auto cod = short_codecs.row(ci);
       Eigen::ArrayXd part1 = Eigen::ArrayXd::Ones(X.size()) * cod[d + 1];
-      for (int i = 0; i < cod.size(); i++) {
+      for (auto i = 0; i < short_codecs.cols(); i++) {
         auto e = cod[i];
         if (i != d + 1) {  // normal powers
           part1 *= stored_powers[e].col(i);
@@ -102,5 +104,5 @@ std::vector<Eigen::ArrayXXd> prism::curve::evaluate_bernstein_derivative(
       dxdydz[d].row(ci) = multinomial[ci] * part1;
     }  // over all basis
   }    // over all variables (dx,dy,dz)
-  return dxdydz;
+  return std::move(dxdydz);
 }

@@ -20,6 +20,7 @@
 #include <prism/phong/projection.hpp>
 #include <prism/predicates/triangle_triangle_intersection.hpp>
 #include <utility>
+#include <geogram/basic/geometry.h>
 #include "cumin/inversion_check.hpp"
 #include "curve_common.hpp"
 #include "prism/cage_utils.hpp"
@@ -41,8 +42,8 @@ std::vector<RowMatd> prism::curve::initialize_cp(const std::vector<Vec3d> &mid,
 }
 
 namespace prism::curve {
-constexpr auto sf_index_a_b = [](bool type){
-  
+constexpr auto sf_index_a_b = [](bool type) {
+
 };
 // Given the Lagrange points for order-d triangle and the flat base
 // Propogate the control points for of three d tetra that consistitutes hex
@@ -53,27 +54,30 @@ constexpr auto sf_index_a_b = [](bool type){
 //    #Tet(3) x #CtPt(35 when d=4) x #Dim(3)
 // Notes:
 //   To be run after going from surface triangle order 3->4
-std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowMatd &mid_ho,
-                                 const RowMatd &top, bool degenerate, bool type,
-                                 const RowMati &tri_cod,
-                                 const RowMati &tet_cod) {
+std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base,
+                                                 const RowMatd &mid_ho,
+                                                 const RowMatd &top,
+                                                 bool degenerate, bool type,
+                                                 const RowMati &tri_cod,
+                                                 const RowMati &tet_cod) {
   assert(base.rows() == 3 && base.cols() == 3 && "linear base");
 
   assert(tri_cod.cols() == tet_cod.cols());
   // tetmesh from shell.
   auto tet = type ? TETRA_SPLIT_A : TETRA_SPLIT_B;
 
-  RowMatd height_fraction = RowMatd::Zero(tet.size(), tet_cod.rows()); // T3 x 35
+  RowMatd height_fraction =
+      RowMatd::Zero(tet.size(), tet_cod.rows());  // T3 x 35
   if (!degenerate) {
-  for (int i = 0; i < tet.size(); i++) {
-    for (int c = 0; c < tet_cod.rows(); c++) {
-      auto cod = tet_cod.row(c);
-      auto h = 0;
-      for (auto ki = 0; ki < cod.size(); ki++)
-        h += tet[i][cod[ki]] / 3; // integer division to get top or bottom.
-      height_fraction(i, c) = (h + 0.) / cod.size();
+    for (int i = 0; i < tet.size(); i++) {
+      for (int c = 0; c < tet_cod.rows(); c++) {
+        auto cod = tet_cod.row(c);
+        auto h = 0;
+        for (auto ki = 0; ki < cod.size(); ki++)
+          h += tet[i][cod[ki]] / 3;  // integer division to get top or bottom.
+        height_fraction(i, c) = (h + 0.) / cod.size();
+      }
     }
-  }
   } else {
     for (int i = 1; i < tet.size(); i++) {
       for (int c = 0; c < tet_cod.rows(); c++) {
@@ -86,7 +90,7 @@ std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowM
         }
         if (cnt_sing < cod.size())
           height_fraction(i, c) = (h + 0.) / (cod.size() - cnt_sing);
-        else 
+        else
           height_fraction(i, c) = 0.;
       }
     }
@@ -97,7 +101,7 @@ std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowM
   for (int i = 0; i < tri_cod.rows(); i++) {
     triplet2index.emplace(tri_cod.row(i), i);
   }
-  RowMati sf_index(tet.size(), tet_cod.rows()); // T3 x 35
+  RowMati sf_index(tet.size(), tet_cod.rows());  // T3 x 35
   for (int i = 0; i < tet_cod.rows(); i++) {
     auto tc = tet_cod.row(i);
     for (int ts = 0; ts < tet.size(); ts++) {
@@ -111,9 +115,9 @@ std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowM
 
   // all the above computation can be offline.
 
-  auto elev_base = linear_elevate(base, tri_cod); // 15 x 3
+  auto elev_base = linear_elevate(base, tri_cod);  // 15 x 3
   RowMatd elev_dir = mid_ho - elev_base;
-  auto elev_top = linear_elevate(top, tri_cod); // 15 x 3
+  auto elev_top = linear_elevate(top, tri_cod);  // 15 x 3
   RowMatd elev_dir_top = mid_ho - elev_top;
 
   // result is the sum of
@@ -124,14 +128,14 @@ std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowM
   auto result =
       std::vector<RowMatd>(6, RowMatd(sf_index.cols(), elev_base.cols()));
 
-  for (int i = degenerate?1:0; i < 3; i++)
+  for (int i = degenerate ? 1 : 0; i < 3; i++)
     for (int j = 0; j < sf_index.cols(); j++)
       for (int k = 0; k < elev_base.cols(); k++) {
         result[i](j, k) = elev_base(sf_index(i, j), k) +
                           height_fraction(i, j) * elev_dir(sf_index(i, j), k);
         result[i + 3](j, k) =
             elev_top(sf_index(i, j), k) +
-            (1-height_fraction(i, j)) * elev_dir_top(sf_index(i, j), k);
+            (1 - height_fraction(i, j)) * elev_dir_top(sf_index(i, j), k);
       }
 
   if (degenerate) {
@@ -140,9 +144,9 @@ std::vector<RowMatd> surface_to_decomposed_tetra(const RowMatd &base, const RowM
   }
 
   return std::move(
-      result); //#tet_elev_base +
-               // Eigen::Map<Eigen::VectorXd>(height_fraction.data(),height_fraction.size()).asDiagonal()
-               //* tet_elev_dir;
+      result);  //#tet_elev_base +
+                // Eigen::Map<Eigen::VectorXd>(height_fraction.data(),height_fraction.size()).asDiagonal()
+                //* tet_elev_dir;
 }
 
 void my_upsample(std::vector<Vec3d> &V, std::vector<Vec3i> &F, int level) {
@@ -155,8 +159,7 @@ void my_upsample(std::vector<Vec3d> &V, std::vector<Vec3i> &F, int level) {
       Vec3i eid;
       for (int j = 0; j < 3; j++) {
         auto u0 = F[i][j], u1 = F[i][(j + 1) % 3];
-        if (u0 > u1)
-          std::swap(u0, u1);
+        if (u0 > u1) std::swap(u0, u1);
         auto u = std::pair(u0, u1);
         auto it = visited.lower_bound(u);
         if (it == visited.end() || it->first != u) {
@@ -176,15 +179,14 @@ void my_upsample(std::vector<Vec3d> &V, std::vector<Vec3i> &F, int level) {
       V[id] = (V[u.first] + V[u.second]) / 2;
     }
   };
-  for (int i = 0; i < level; i++)
-    single_level(V, F);
+  for (int i = 0; i < level; i++) single_level(V, F);
 }
 
 std::tuple<RowMati, std::vector<std::pair<int, int>>, RowMati> upsampled_uv(
     const std::vector<Vec3i> &F, std::vector<int> &res_fid,
     std::vector<Vec3d> &res_uv) {
-  auto& helper = prism::curve::magic_matrices();
-  auto& [unitV, unitF, vert_id, edge_id, face_id] = helper.upsample_data;
+  auto &helper = prism::curve::magic_matrices();
+  auto &[unitV, unitF, vert_id, edge_id, face_id] = helper.upsample_data;
   int num_sample = unitV.rows();
   auto [TT, TTi] = prism::local::triangle_triangle_adjacency(F);
   Eigen::Matrix<bool, -1, 3, Eigen::RowMajor> edge_flags(F.size(), 3);
@@ -194,8 +196,8 @@ std::tuple<RowMati, std::vector<std::pair<int, int>>, RowMati> upsampled_uv(
   all_node_map.setConstant(-1);
   std::vector<std::pair<int, int>> indices;
   indices.reserve(num_sample * F.size());
-  for (auto i = 0, cnt = 0; i < F.size(); i++) { // flags computation
-    for (int j = 0; j < 3; j++) {                // through each vertex
+  for (auto i = 0, cnt = 0; i < F.size(); i++) {  // flags computation
+    for (int j = 0; j < 3; j++) {                 // through each vertex
       auto vid = F[i][j];
       auto it = vert_map.lower_bound(vid);
       if (vert_map.empty() || it->first != vid) {
@@ -204,17 +206,16 @@ std::tuple<RowMati, std::vector<std::pair<int, int>>, RowMati> upsampled_uv(
       }
       all_node_map(i, vert_id[j]) = it->second;
     }
-    for (int j = 0; j < 3; j++) { // through each edge
+    for (int j = 0; j < 3; j++) {  // through each edge
       auto u0 = F[i][j], u1 = F[i][(j + 1) % 3];
-      if (edge_flags(i, j) == false) { // not visited
+      if (edge_flags(i, j) == false) {  // not visited
         for (auto k : edge_id[j]) {
           all_node_map(i, k) = indices.size();
           indices.emplace_back(i, k);
         }
         edge_flags(i, j) = true;
         auto ii = TT[i][j], jj = TTi[i][j];
-        if (ii != -1)
-          edge_flags(ii, jj) = true;
+        if (ii != -1) edge_flags(ii, jj) = true;
         continue;
       }
       // query for the oppo.
@@ -227,7 +228,7 @@ std::tuple<RowMati, std::vector<std::pair<int, int>>, RowMati> upsampled_uv(
             all_node_map(ii, oppo_edge_id[sz - k - 1]);
       }
     }
-    for (auto k : face_id) { // face nodes, all new
+    for (auto k : face_id) {  // face nodes, all new
       all_node_map(i, k) = indices.size();
       indices.emplace_back(i, k);
     }
@@ -248,16 +249,16 @@ std::tuple<RowMati, std::vector<std::pair<int, int>>, RowMati> upsampled_uv(
   }
   return std::tuple(final_F, indices, all_node_map);
 }
-}
+}  // namespace prism::curve
 
 namespace prism::curve {
-bool elevated_positive(
-    const std::vector<Vec3d> &base, const std::vector<Vec3d> &top,
-    const std::vector<Vec3i> &nbF,
-    bool recurse_check, const std::vector<RowMatd> &local_cp) {
+bool elevated_positive(const std::vector<Vec3d> &base,
+                       const std::vector<Vec3d> &top,
+                       const std::vector<Vec3i> &nbF, bool recurse_check,
+                       const std::vector<RowMatd> &local_cp) {
   auto helper = prism::curve::magic_matrices();
-  auto & tri15lag_from_tri10bern = helper.elev_lag_from_bern;
-  auto& dxyz = helper.volume_data.vec_dxyz;
+  auto &tri15lag_from_tri10bern = helper.elev_lag_from_bern;
+  auto &dxyz = helper.volume_data.vec_dxyz;
   auto tri4_cod = codecs_gen_id(helper.tri_order + 1, 2);
   auto tet4_cod = codecs_gen_id(helper.tri_order + 1, 3);
   assert(tri15lag_from_tri10bern.rows() !=
@@ -289,7 +290,9 @@ bool elevated_positive(
       for (auto &t : tens) {
         // this is codec_bc.
         if (!prism::curve::tetrahedron_inversion_check(
-                t, helper.volume_data.vol_codec, helper.volume_data.vol_jac_codec, helper.volume_data.vol_bern_from_lagr,
+                t, helper.volume_data.vol_codec,
+                helper.volume_data.vol_jac_codec,
+                helper.volume_data.vol_bern_from_lagr,
                 helper.volume_data.vol_jac_bern_from_lagr)) {
           spdlog::debug("blocked by recursive {}", mf);
           return false;
@@ -331,10 +334,20 @@ void sample_hit_discrete(
   auto query = [&refV, &refF, &reftree, &total_trackee = tri_list](
                    const Vec3d &s, const Vec3d &t, prism::Hit &hit) -> bool {
     std::array<Vec3d, 2> seg_query{s, t};
-    for (auto f : total_trackee) { // can be accelearated by AABB.
+    GEO::Box seg_box;
+    for (int i = 0; i < 3; i++) {
+      seg_box.xyz_max[i] = std::max(s[i], t[i]);
+      seg_box.xyz_min[i] = std::min(s[i], t[i]);
+    }
+    for (auto f : total_trackee) {  // can be accelearated by AABB.
       auto v0 = refF(f, 0), v1 = refF(f, 1), v2 = refF(f, 2);
       std::array<Vec3d, 3> tri{refV.row(v0), refV.row(v1), refV.row(v2)};
-
+      GEO::Box tri_box;
+      for (int i = 0; i < 3; i++) {
+        tri_box.xyz_max[i] = std::max({tri[0][i], tri[1][i], tri[2][i]});
+        tri_box.xyz_min[i] = std::min({tri[0][i], tri[1][i], tri[2][i]});
+      }
+      if (!GEO::bboxes_overlap(seg_box, tri_box)) continue;
       if (prism::predicates::segment_triangle_overlap(seg_query, tri)) {
         prism::intersections::segment_triangle_hit_cgal(seg_query, tri, hit);
         hit.id = f;
@@ -356,12 +369,10 @@ void sample_hit_discrete(
     hits[i].id = -1;
     bool checked_once = false;
     for (int j = 0; j < endpts0.size() - 1; j++) {
-      if (endpts0[j] == endpts0[j + 1])
-        continue;
+      if (endpts0[j] == endpts0[j + 1]) continue;
       checked_once = true;
       auto q = query(endpts0[j], endpts0[j + 1], hits[i]);
-      if (q)
-        break;
+      if (q) break;
     }
     if (!checked_once) {
       // special direct setting for singularity query.
@@ -416,11 +427,11 @@ void sample_hit(const std::vector<Vec3d> &base, const std::vector<Vec3d> &mid,
   auto query = [&refV, &refF, &reftree](const Vec3d &s, const Vec3d &t,
                                         const auto &total_trackee,
                                         prism::Hit &hit) -> bool {
-    if (reftree.enabled) // this can be discarded if no performance benefit is
-                         // found.
+    if (reftree.enabled)  // this can be discarded if no performance benefit is
+                          // found.
       return reftree.segment_hit(s, t, hit);
     std::array<Vec3d, 2> seg_query{s, t};
-    for (auto f : total_trackee) { // can be accelearated by AABB.
+    for (auto f : total_trackee) {  // can be accelearated by AABB.
       auto v0 = refF(f, 0), v1 = refF(f, 1), v2 = refF(f, 2);
       std::array<Vec3d, 3> tri{refV.row(v0), refV.row(v1), refV.row(v2)};
 
@@ -460,8 +471,7 @@ void sample_hit(const std::vector<Vec3d> &base, const std::vector<Vec3d> &mid,
     hits[i].t = -1;
 
     auto q = query(bp, mp, tri_list, hits[i]);
-    if (!q)
-      q = query(mp, tp, tri_list, hits[i]);
+    if (!q) q = query(mp, tp, tri_list, hits[i]);
     if (!q) {
       [&]() {
         spdlog::dump_backtrace();
@@ -558,7 +568,7 @@ auto ring_fit(const std::vector<Vec3i> &nbF, std::vector<RowMatd> &linear_cp,
   for (auto [cod, i] : local_map) {
     auto it = nb_cp_map.find(cod);
     auto [f, e] = local_fe[i];
-    if (it != nb_cp_map.end()) { // found
+    if (it != nb_cp_map.end()) {  // found
       linear_cp[f].row(e) = it->second;
       bnd_cp.push_back(i);
     }
@@ -580,9 +590,9 @@ auto ring_fit(const std::vector<Vec3i> &nbF, std::vector<RowMatd> &linear_cp,
   igl::min_quad_with_fixed_data<double> mqf;
   double alpha = 1e-5;
   Eigen::SparseMatrix<double> AtA =
-      (A.transpose() * A); //+ alpha * (A.transpose() * L.transpose() * L * A);
+      (A.transpose() * A);  //+ alpha * (A.transpose() * L.transpose() * L * A);
   RowMatd Atb =
-      -(A.transpose() * b); //- alpha * (A.transpose() * L.transpose() * hn);
+      -(A.transpose() * b);  //- alpha * (A.transpose() * L.transpose() * hn);
   igl::min_quad_with_fixed_precompute(
       AtA, Eigen::Map<Eigen::VectorXi>(bnd_cp.data(), bnd_cp.size()),
       Eigen::SparseMatrix<double>(), true, mqf);
@@ -618,9 +628,10 @@ auto ring_fit(const std::vector<Vec3i> &nbF, std::vector<RowMatd> &linear_cp,
   return duplicate_cp;
 };
 
-} // namespace prism::curve
+}  // namespace prism::curve
 
-prism::curve::HelperTensors::UpsampleData local_upsample_arrange_data(int level) {
+prism::curve::HelperTensors::UpsampleData local_upsample_arrange_data(
+    int level) {
   RowMatd unitV;
   RowMati unitF;
   Vec3i vert_id;
@@ -633,7 +644,7 @@ prism::curve::HelperTensors::UpsampleData local_upsample_arrange_data(int level)
     unitF.resize(1, 3);
     unitF << 0, 1, 2;
     igl::upsample(unitV, unitF,
-                  level); // turns out this is a time-consuming routine
+                  level);  // turns out this is a time-consuming routine
     Eigen::VectorXi unitE;
     igl::boundary_loop(unitF, unitE);
     assert(unitE(0) == 0);
@@ -649,24 +660,23 @@ prism::curve::HelperTensors::UpsampleData local_upsample_arrange_data(int level)
           edge_id[j][k - 1] = unitE(j * num_edge + k);
       }
       std::vector<bool> interior_flag(unitV.rows(), true);
-      for (int i = 0; i < unitE.size(); i++)
-        interior_flag[unitE[i]] = false;
+      for (int i = 0; i < unitE.size(); i++) interior_flag[unitE[i]] = false;
       for (auto i = 0; i < interior_flag.size(); i++) {
-        if (interior_flag[i])
-          face_id.push_back(i);
+        if (interior_flag[i]) face_id.push_back(i);
       }
     }
   }
   return {unitV, unitF, vert_id, edge_id, face_id};
 }
 
-std::shared_ptr<prism::curve::HelperTensors> prism::curve::HelperTensors::tensors_;
+std::shared_ptr<prism::curve::HelperTensors>
+    prism::curve::HelperTensors::tensors_;
 void prism::curve::HelperTensors::init(int tri_order, int level) {
-  #ifdef CUMIN_MAGIC_DATA_PATH
+#ifdef CUMIN_MAGIC_DATA_PATH
   std::string data_path = CUMIN_MAGIC_DATA_PATH;
-  #else 
+#else
   std::string data_path = "../python/curve/data";
-  #endif
+#endif
   RowMatd tri10_lv5, tri15lag_from_tri10bern, lag_from_bern;
   std::array<RowMatd, 2> duv_lv5;
   std::vector<RowMatd> vec_dxyz;
@@ -680,29 +690,32 @@ void prism::curve::HelperTensors::init(int tri_order, int level) {
     lag_from_bern = H5Easy::load<RowMatd>(file0, "bern2lag").transpose();
     duv_lv5[0] = H5Easy::load<RowMatd>(file0, "deri_u");  // (sample) 45 x 10
     duv_lv5[1] = H5Easy::load<RowMatd>(file0, "deri_v");
-  // }
-  // {
+    // }
+    // {
     H5Easy::File file(
         fmt::format("{}/p{}_quniform5_dxyz.h5", data_path, tri_order + 1),
         H5Easy::File::ReadOnly);
-    auto tet4_dxyz = H5Easy::load<std::vector<std::vector<std::vector<double>>>>(file, "dxyz");
+    auto tet4_dxyz =
+        H5Easy::load<std::vector<std::vector<std::vector<double>>>>(file,
+                                                                    "dxyz");
     vec_dxyz.resize(tet4_dxyz[0].size());
-     for (auto i1 = 0; i1 < tet4_dxyz[0].size(); i1++) {
+    for (auto i1 = 0; i1 < tet4_dxyz[0].size(); i1++) {
       vec_dxyz[i1].resize(tet4_dxyz.size(), tet4_dxyz[0][0].size());
       for (auto i0 = 0; i0 < tet4_dxyz.size(); i0++)
         for (auto i2 = 0; i2 < tet4_dxyz[0][0].size(); i2++)
           vec_dxyz[i1](i0, i2) = tet4_dxyz[i0][i1][i2];
     }
-  } catch (HighFive::Exception& e){
-     spdlog::critical(e.what());
-     spdlog::critical("The file for (high order) helper matrices are not present. \
+  } catch (HighFive::Exception &e) {
+    spdlog::critical(e.what());
+    spdlog::critical(
+        "The file for (high order) helper matrices are not present. \
      Try to use `python/cumin_datagen.py` to generate them for higher order meshes. \
       Program Aborting!");
-      exit(1);
+    exit(1);
   }
   RowMatd bern_from_lagr_o9, bern_from_lagr_o4;
   RowMati codecs_o4_bc, codecs_o9_bc;
-  auto jac_order = tri_order* 3;
+  auto jac_order = tri_order * 3;
   auto tet_order = tri_order + 1;
   auto get_l2b = [data_path](std::string filename) {
     H5Easy::File file1(data_path + filename);
@@ -721,17 +734,18 @@ void prism::curve::HelperTensors::init(int tri_order, int level) {
   assert(tri15lag_from_tri10bern.rows() ==
          (tri_order + 3) * (tri_order + 2) / 2);
   // volume checks
-  assert(bern_from_lagr_o4.rows() == (tet_order+1)*(tet_order+2)*(tet_order+3)/6);
-  assert(bern_from_lagr_o9.rows() == (jac_order+1)*(jac_order+2)*(jac_order+3)/6);
+  assert(bern_from_lagr_o4.rows() ==
+         (tet_order + 1) * (tet_order + 2) * (tet_order + 3) / 6);
+  assert(bern_from_lagr_o9.rows() ==
+         (jac_order + 1) * (jac_order + 2) * (jac_order + 3) / 6);
 
   spdlog::info(
       "High Order Tensors ({}): bern {}x{} bern2elev_lag {}x{} "
       "dxyz {}x{}x{} duv_lv[{}] {}x{}",
-      data_path,
-      tri10_lv5.rows(), tri10_lv5.cols(), tri15lag_from_tri10bern.rows(),
-      tri15lag_from_tri10bern.cols(), 
-      vec_dxyz.size(), vec_dxyz[0].rows(), vec_dxyz[0].cols(),
-      duv_lv5.size(), duv_lv5[0].rows(), duv_lv5[0].cols());
+      data_path, tri10_lv5.rows(), tri10_lv5.cols(),
+      tri15lag_from_tri10bern.rows(), tri15lag_from_tri10bern.cols(),
+      vec_dxyz.size(), vec_dxyz[0].rows(), vec_dxyz[0].cols(), duv_lv5.size(),
+      duv_lv5[0].rows(), duv_lv5[0].cols());
 
   tensors_ = std::make_shared<prism::curve::HelperTensors>();
   tensors_->tri_order = tri_order;
