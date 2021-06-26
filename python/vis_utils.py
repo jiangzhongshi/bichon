@@ -49,45 +49,6 @@ def smoother(L, b, V):
     print(np.linalg.norm(L@V))
     return V
 
-
-def doo_sabin(V,F, eps=0.05):
-    dsF = []
-    v_num = V.shape[0]
-    f_num = F.shape[0]
-    he_num = F.shape[0]*3
-    # total v_num + he_num (==3*f_num) + 3*f_num
-    dsV = np.zeros((v_num + he_num + 3*f_num,3))
-    dsV[:v_num] = V
-    FF, FFi = igl.triangle_triangle_adjacency(F)
-    for i in range(F.shape[0]):
-        v0,v1,v2 = F[i]
-        f0, f1, f2 = v_num + he_num + 3*i + np.arange(3)
-        e0 = v_num + 3*i+np.arange(3)
-        e1 = np.zeros(3)
-        for e in range(3):
-            f_oppo, e_oppo = FF[i,e], FFi[i,e]
-            e1[e] = v_num + 3*f_oppo + e_oppo
-        newF = np.array([[v0, e0[0], f0],
-                        [v0, f0, e1[2]],
-                        [e0[0],e1[0],f1],
-                        [e0[0],f1,f0],
-                        [v1,f1,e1[0]],
-                        [v1, e0[1],f1],
-                        [e0[1],f2,f1],
-                        [e0[1],e1[1],f2],
-                        [e1[1],v2,f2],
-                         [f2,v2,e0[2]],
-                         [f2,e0[2],f0],
-                         [f0,e0[2],e1[2]],
-                        [f0,f1,f2]])
-        dsF.append(newF)
-        fx = [f0,f1,f2]
-        for e in range(3):
-            dsV[e0[e]] = (1-eps)*V[F[i,e]] + eps * V[F[i,(e+1)%3]]
-            dsV[fx[e]] = (1-eps)*V[F[i,e]] + eps/2 * V[F[i,(e+1)%3]] + eps/2*V[F[i,(e+2)%3]]
-    return dsV, np.array(dsF)
-
-
 def triangle_quality(p0,p1,p2):
     e1, e2 = p1 - p0, p2 - p0
     e1_len = np.linalg.norm(e1)
@@ -99,14 +60,6 @@ def triangle_quality(p0,p1,p2):
     frob2 = (jac**2).sum()
     det = np.linalg.det(jac)
     return frob2/det
-
-def msubplot(v_list,f_list,shape ,**sh):
-    plt = None
-    for i,(v,f) in enumerate(zip(v_list,f_list)):
-        vw = mp.Viewer(sh)
-        vw.add_mesh(v,f,shading=sh)
-        plt = mp.Subplot(plt, vw, s=[shape[0],shape[1],i])
-    return plt
 
 
 def str_to_array(s):
@@ -179,7 +132,7 @@ def corner_to_cube(c0, c1):
                     [0,2,4],[2,6,4],[3,7,5],[3,1,5]])
     return pts, tris
         
-def shrink(tetV,tetT, alpha):
+def shrink(tetV, tetT, alpha):
     VT = tetV[tetT]
     mean = VT.mean(axis=1,keepdims=True)
     return (VT - mean)*alpha + mean
@@ -196,7 +149,7 @@ def tetmesh_from_shell(base, top, F):
         T.append((tet_c // 3)*vnum + f[tet_c % 3])
     return np.vstack([base, top]), np.vstack(T)
 
-def control_points_duplicate_consistent():
+def control_points_duplicate_consistent_check(mV, mF, cp):
     VF,NI = igl.vertex_triangle_adjacency(mF, len(mV))
     VFs = np.split(VF,NI[1:-1])
     for v, nbF in enumerate(VFs):
@@ -263,6 +216,7 @@ def convert_tri10():
     
 
 def tet_highorder_sv(cp,level=3, order=3):
+    from curve import fem_generator
     dim = 3
     def local_upsample(level:int):
         tet = igl.boundary_facets(np.array([0, 1, 2, 3]).reshape(1,4))
@@ -281,11 +235,3 @@ def tet_highorder_sv(cp,level=3, order=3):
     return sv, np.vstack([usF+i*len(usV) for i in range(len(sv))]), np.vstack([usE+i*len(usV) for i in range(len(sv))])
 
   
- def convert_p4(file1, file2):
-    import meshio
-    # a handy conversion for the default output mesh (p4).
-    with h5py.File(file1,'r') as fp:
-        lagr, p4T  = fp['lagr'][()], fp['cells'][()]
-        reorder = np.array([ 0,  1,  2,  3,  4, 16,  5,  7, 18,  9,  8, 17,  6, 13, 19, 10, 15,
-               21, 12, 14, 20, 11, 22, 24, 23, 25, 26, 31, 27, 32, 29, 33, 28, 30, 34])
-        meshio.write(file2, meshio.Mesh(points=lagr, cells=[('tetra35', p4T[:,reorder])]))
