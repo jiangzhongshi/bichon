@@ -21,16 +21,16 @@ namespace prism::curve {
 struct HelperTensors {
   RowMatd bern_val_samples, elev_lag_from_bern;
   std::array<RowMatd, 2> duv_samples;
-  Eigen::Matrix<int, -1, 3> tri_codec, tri_elev_codec;
+  Eigen::MatrixX3i tri_codec, tri_elev_codec;
   struct VolumeData {
     std::vector<RowMatd> vec_dxyz;
     RowMatd vol_bern_from_lagr, vol_jac_bern_from_lagr;
-    Eigen::Matrix<int, -1, 4> vol_codec, vol_jac_codec;
+    Eigen::MatrixX4i vol_codec, vol_jac_codec;
     
   } volume_data;
   struct InversionHelp {
     int cache = -1;
-    std::array<Eigen::ArrayXXd, 3> bernstein_derivatives_checker;
+    std::array<RowMatd, 3> bernstein_derivatives_checker;
   } inversion_helper;
   int tri_order = 3;
   int level = 3;
