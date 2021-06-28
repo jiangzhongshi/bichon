@@ -48,10 +48,12 @@ endif()
 if(NOT TARGET highfive)
   prism_download_HighFive()
   option(HIGHFIVE_USE_EIGEN ON)
+
   find_package(HDF5 REQUIRED)
   add_library(highfive INTERFACE)
   target_include_directories(highfive SYSTEM INTERFACE ${PRISM_EXTERNAL}/HighFive/include/ ${HDF5_INCLUDE_DIRS})
   target_link_libraries(highfive INTERFACE ${HDF5_LIBRARIES})
+  target_compile_definitions(highfive INTERFACE H5_BUILT_AS_DYNAMIC_LIB)
 endif()
 
 if(NOT TARGET geogram::geogram)
