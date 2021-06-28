@@ -154,4 +154,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.config }} ^
             -B build ^
             -S .
+            -DIGL_STATIC_RUNTIME=ON
+            -DH5_BUILT_AS_DYNAMIC_LIB=1
           cmake --build build --target cumin_bin
