@@ -153,8 +153,7 @@ jobs:
           $env:PATH += ";C:\Miniconda\Library\bin"
           .\build\Release\cumin_bin.exe -h
       - name: Test
-        working-directory: ${{runner.workspace}}/build
         shell: powershell
         run: | 
-            wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off
+            wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off -OutFile bunny.off
             .\build\Release\cumin_bin.exe -i bunny.off
