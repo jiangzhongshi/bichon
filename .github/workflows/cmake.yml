@@ -151,4 +151,6 @@ jobs:
           cmake -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_BUILD_TYPE=Release -B build -S . -DIGL_STATIC_RUNTIME=ON
           cmake --build build --target cumin_bin
           $env:PATH += ";C:\Miniconda\Library\bin"
-          .\build\Release\cumin_bin.exe -h
+          ls build
+          ls build\Release
+          .\build\Debug\cumin_bin.exe -h
