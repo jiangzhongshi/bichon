@@ -146,16 +146,9 @@ jobs:
         # We run configure + build in the same step, since they both need to call VsDevCmd
         # Also, cmd uses ^ to break commands into multiple lines (in powershell this is `)
       - name: Configure and build
-        shell: cmd
+        shell: powershell
         run: |
-          dir C:\Miniconda\pkgs
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
-          cmake ^
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -B build ^
-            -S . ^
-            -DIGL_STATIC_RUNTIME=ON
+          cmake -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_BUILD_TYPE=Release -B build -S . -DIGL_STATIC_RUNTIME=ON
           cmake --build build --target cumin_bin
-          set PATH=%PATH%;C:\Miniconda\Library\bin
+          $env:PATH += ";C:\Miniconda\Library\bin"
           .\build\Release\cumin_bin.exe -h
