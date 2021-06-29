@@ -157,4 +157,5 @@ jobs:
             -S . ^
             -DIGL_STATIC_RUNTIME=ON
           cmake --build build --target cumin_bin
+          set PATH=%PATH%;C:\Miniconda\Library\bin
           .\build\Release\cumin_bin.exe -h
