@@ -115,7 +115,7 @@ jobs:
       - name: Install Dependencies
         shell: powershell
         run: |
-          conda install -c conda-forge mpfr hdf5 boost-cpp -y
+          conda install -c conda-forge mpfr hdf5 boost-cpp wget -y
       
       - name: Checkout repository
         uses: actions/checkout@v1
@@ -148,7 +148,13 @@ jobs:
       - name: Configure and build
         shell: powershell
         run: |
-          cmake -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_BUILD_TYPE=Release -B build -S . -DIGL_STATIC_RUNTIME=ON
-          cmake --build build --target cumin_bin
+          cmake -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_BUILD_TYPE=${{ matrix.config }} -B build -S . -DIGL_STATIC_RUNTIME=ON
+          cmake --build build --target cumin_bin --config ${{ matrix.config }}
           $env:PATH += ";C:\Miniconda\Library\bin"
           .\build\Release\cumin_bin.exe -h
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        shell: powershell
+        run: | 
+            wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off
+            .\build\Release\cumin_bin.exe -i bunny.off
