@@ -1,6 +1,7 @@
 #ifndef PRISM_ENERGY_SMOOTHER_PILLAR_HPP
 #define PRISM_ENERGY_SMOOTHER_PILLAR_HPP
 #include <prism/common.hpp>
+#include <optional>
 
 namespace prism {
 RowMatd one_ring_volumes(const std::vector<Vec3d>& base,

@@ -410,8 +410,13 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   Eigen::VectorXi labels;
   tetshell_fill(vbase, mB, mT, vtop, mF, Vmsh, Tmsh, labels);
   spdlog::debug("Tmsh {}", Tmsh.rows());
-  Tmsh = igl::slice_mask(
-      Tmsh, labels.unaryExpr([](const int x) -> bool { return x == 1; }), 1);
+  std::vector<Eigen::VectorXi> T1;
+  for (auto l = 0; l < labels.size(); l++) {
+      if (labels[l] == 1)
+          T1.emplace_back(Tmsh.row(l));
+  }
+  vec2eigen(T1, Tmsh);
+
   spdlog::debug("Tmsh {}", Tmsh.rows());
 
   auto &helper = prism::curve::magic_matrices(-1, -1);

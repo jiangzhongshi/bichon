@@ -8,6 +8,7 @@
 #include <highfive/H5Easy.hpp>
 #include <prism/common.hpp>
 #include <queue>
+#include <optional>
 
 #include "curve_common.hpp"
 #include "curve_utils.hpp"
