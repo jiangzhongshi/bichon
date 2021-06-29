@@ -115,7 +115,7 @@ jobs:
       - name: Install Dependencies
         shell: powershell
         run: |
-          conda install -c conda-forge mpfr hdf5 boost-cpp wget -y
+          conda install -c conda-forge mpfr hdf5 boost-cpp -y
       
       - name: Checkout repository
         uses: actions/checkout@v1
