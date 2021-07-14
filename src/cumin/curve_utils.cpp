@@ -289,11 +289,7 @@ bool elevated_positive(const std::vector<Vec3d> &base,
     if (recurse_check) {
       for (auto &t : tens) {
         // this is codec_bc.
-        if (!prism::curve::tetrahedron_inversion_check(
-                t, helper.volume_data.vol_codec,
-                helper.volume_data.vol_jac_codec,
-                helper.volume_data.vol_bern_from_lagr,
-                helper.volume_data.vol_jac_bern_from_lagr)) {
+        if (!prism::curve::tetrahedron_inversion_check(t)) {
           spdlog::debug("blocked by recursive {}", mf);
           return false;
         }

@@ -234,11 +234,7 @@ bool prism::pointless_triangle_intersect_octahedron(
     bool point_inside = false;
     for (auto j = singular? 4: 0; j<12; j++) {
       auto&t = TWELVE_TETRAS[j];
-      // if (GEO::PCK::orient_3d(vecprism[t[0]].data(), vecprism[t[1]].data(), vecprism[t[2]].data(),
-      //         vecprism[t[3]].data()) > 0) 
-      //   spdlog::info(" positive");
-      // else 
-      //   spdlog::info("not positive");
+
       if (prism::predicates::point_in_tetrahedron(
               vectriangle[i], vecprism[t[0]], vecprism[t[1]], vecprism[t[2]],
               vecprism[t[3]])) {

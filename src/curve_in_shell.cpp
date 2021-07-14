@@ -82,6 +82,7 @@ int main(int argc, char **argv) {
       {"skip_collapse", false},
       {"skip_split", true},
       {"skip_volume", false},
+      {"danger_no_precondition", false},
   };
   config["tetfill"] = {{"tetwild", true}};
   config["cutet"] = {

@@ -511,7 +511,8 @@ void feature_and_curve(std::string filename, std::string fgname,
 
       spdlog::info("V={}, F={}", V.rows(), F.rows());
       put_in_unit_box(V);
-      if (!preconditions(V, F, filename)) return;
+      if (!control_cfg["danger_no_precondition"])
+        if (!preconditions(V, F, filename)) return;
     }
     RowMati feature_edges;
     Eigen::VectorXi feature_corners;

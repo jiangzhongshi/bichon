@@ -371,6 +371,10 @@ distort_check(const std::vector<Vec3d> &base,
               const std::set<int> &combined_trackee, // indices to ref.F tracked
               const RowMatd &refV, const RowMati &refF, double distortion_bound,
               int num_freeze, bool bundled_intersection) {
+                // ANCHOR: 80% bottleneck for no-curve pipeline.
+                // reduce the predicates would go a long way 
+                // Possible improvements: 1. check walls, instead of cells and fill in topologically
+                // 2. Parallel
   // NormalCheck
   spdlog::trace("In NC ct#{}, tris{}", combined_trackee.size(), tris.size());
   igl::Timer timer;
@@ -378,7 +382,7 @@ distort_check(const std::vector<Vec3d> &base,
   assert(base.size() == top.size());
   assert(base.size() == mid.size());
   std::vector<std::set<int>> distributed_refs(tris.size());
-  for (int i = 0; i < tris.size(); i++) {
+  for (int i = 0; i < tris.size(); i++) { // over all the prism cells.
     auto [v0, v1, v2] = tris[i];
     std::array<Vec3d, 3> base_vert{base[v0], base[v1], base[v2]};
     std::array<Vec3d, 3> mid_vert{mid[v0], mid[v1], mid[v2]};
