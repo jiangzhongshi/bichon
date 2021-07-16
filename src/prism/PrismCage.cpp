@@ -192,7 +192,7 @@ PrismCage::PrismCage(const RowMatd &vert, const RowMati &face,
   for (int i = 0; i < dsF.rows(); i++) {
     auto [s, mt, shift] = tetra_split_AorB({dsF(i, 0), dsF(i, 1), dsF(i, 2)});
     for (int j = 0; j < 3; j++) dsF(i, j) = mt[j];
-    if (mt[1] < num_cons || mt[2] < num_cons) throw 10;
+    if (mt[1] < num_cons || mt[2] < num_cons) throw std::runtime_error("only one vertex in each triangle can be singular.");
   }
 
   ref.aabb.reset(

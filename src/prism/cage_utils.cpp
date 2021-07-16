@@ -730,7 +730,7 @@ std::map<std::pair<int, int>, int> prism::cage_utils::split_singular_edges(
   for (auto fi = 0; fi < F.size(); fi++) {
     if (is_singular(F[fi][0]) && is_singular(F[fi][1]) && is_singular(F[fi][2])) {
       spdlog::error("Fully Singular Face");
-      throw 1;
+      throw std::runtime_error("Fully Singular Face");
     }
     for (auto ei = 0; ei < 3; ei++) {
       auto v0 = F[fi][(ei)], v1 = F[fi][(ei + 1) % 3];

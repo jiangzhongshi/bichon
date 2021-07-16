@@ -333,7 +333,7 @@ void cutet_optim(RowMatd &lagr, RowMati &p4T, nlohmann::json config) {
     if (!(prism::curve::InversionCheck(lagr, p4T, codecs_o4_bc, codecs_o9_bc,
                                        bern_from_lagr_o4, bern_from_lagr_o9))) {
       spdlog::error("Inversion check failure: " + str + "  ");
-      throw 1;
+      throw std::runtime_error("Inversion check failure");
     }
   };
 

@@ -51,12 +51,22 @@ void python_export_curve(py::module &m) {
       },
       "", "cp"_a);
 
+  m.def("clear_curve_cache", []() {
+    spdlog::info("clear curve cache. For repeated experiment of different orders.");
+    HelperTensors::tensors_.clear();
+  });
   m.def(
       "elevated_positive_check",
       [](const RowMatd &f_base, const RowMatd &f_top, const RowMatd &lagcp,
          bool recurse_check) -> bool {
+        if (f_base.rows() != 3 || f_top.rows() != 3) {
+          throw std::runtime_error(
+              "elevated_positive_check: f_base and f_top must be 3x3 matrices");
+        }
+        auto order = find_order_tri(lagcp.rows()) - 1;
+        spdlog::trace("triangle order {}", order);
         auto helper =
-            prism::curve::magic_matrices(find_order_tri(lagcp.rows()));
+            prism::curve::magic_matrices(order, 3);
         auto &tri15lag_from_tri10bern = helper.elev_lag_from_bern;
         auto &dxyz = helper.volume_data.vec_dxyz;
         auto tri4_cod = codecs_gen_id(helper.tri_order + 1, 2);
@@ -86,5 +96,5 @@ void python_export_curve(py::module &m) {
         }
         return true;
       },
-      "f_base"_a, "f_top"_a, "lagrcp"_a, "recurse_check"_a = false);
+      "f_base"_a, "f_top"_a, "lagrcp"_a, "recurse_check"_a = false, "comment");
 }

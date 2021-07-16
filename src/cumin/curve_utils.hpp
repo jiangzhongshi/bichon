@@ -48,7 +48,7 @@ struct HelperTensors {
 inline HelperTensors &magic_matrices(int tri_order = -1, int level = -1) {
   if (!HelperTensors::tensors_) {
     if (tri_order == -1) {
-      throw 1;
+      throw std::runtime_error("HelperTensors::init(int tri_order, int level) must be called first");
     }
     HelperTensors::init(tri_order, level);
   }
@@ -56,7 +56,7 @@ inline HelperTensors &magic_matrices(int tri_order = -1, int level = -1) {
     if (HelperTensors::tensors_->tri_order != tri_order ||
         HelperTensors::tensors_->level != level) {
       // unmatched.
-      throw 1;
+      throw std::runtime_error("HelperTensors::init(int tri_order, int level) called with mismatched parameters");
     }
   }
   return *HelperTensors::tensors_;
