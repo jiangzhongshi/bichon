@@ -53,7 +53,7 @@ void python_export_curve(py::module &m) {
 
   m.def("clear_curve_cache", []() {
     spdlog::info("clear curve cache. For repeated experiment of different orders.");
-    HelperTensors::tensors_.clear();
+    prism::curve::HelperTensors::tensors_.reset();
   });
   m.def(
       "elevated_positive_check",

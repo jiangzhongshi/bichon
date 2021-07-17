@@ -317,7 +317,7 @@ void prism::bevel_utils::edge_based_bevel(const RowMatd& V, const RowMati& F,
       auto [e0, ve] = [&mark]() {
         for (auto j = 0; j < 3; j++)
           if (mark(j) >= 0) return std::pair(j, mark(j));
-        assert(false)
+        assert(false);
         return std::pair(-1, -1);
       }();
       auto v0 = Ff(e0);
