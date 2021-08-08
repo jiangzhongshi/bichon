@@ -1,7 +1,7 @@
 import numpy as np
-import meshplot as mp
 from collections import defaultdict
 import scipy
+import tqdm
 import igl
 
 
@@ -62,8 +62,6 @@ def greedy_pairing(f, score, sharp_markers):
     return occupied, pairs
 
 
-from collections import defaultdict
-import tqdm
 def crawling(hybrid):
     def set_conn(v0,v1,x):
         if v0<v1:

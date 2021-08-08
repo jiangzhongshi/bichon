@@ -1,5 +1,6 @@
+import fem_tabulator as feta
 import numpy as np
-import quad.quad_curve_utils as qr
+import quad_curve_utils as qr
 import tqdm
 
 def eval_bc(verts, faces, bc_i, denom:int):
@@ -12,7 +13,7 @@ def bezier_fit_matrix(order : int, level : int) -> np.ndarray:
     bsv = bsv.reshape(len(bsv),-1)
     return bsv
 
-def bezier_check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, order, progress_bar = True):
+def bezier_check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, order, valid_check, progress_bar = True):
     all_b, all_t = qr.top_and_bottom_sample(mB,mT, F, quads, q2t, trim_types, level=1)
     v4, f4 = qr.split_square(1)
 
@@ -31,7 +32,7 @@ def bezier_check_validity(mB,mT,F, quads, q2t, trim_types, quad_cp, order, progr
     for q,qcp in enumerate(pbar):
         lagr = A13@qcp
         for t,g in zip(f4, grid_ids):
-            if not (prism.elevated_positive_check(all_b[q][t], all_t[q][t], 
+            if not (valid_check(all_b[q][t], all_t[q][t], 
                                                   lagr[g], True)):
                 valid_quad[q] = False
                 break

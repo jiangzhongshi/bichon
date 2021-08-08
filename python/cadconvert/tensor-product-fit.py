@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
-from curve import fem_tabulator as feta
-from vis_utils import h5reader, highorder_sv
-from quad import quad_curve_utils as qr
-from quad import quad_utils
+import fem_tabulator as feta
+import h5py
+import quad_curve_utils as qr
+import quad_utils
 import numpy as np
 import igl
 import sys
@@ -11,8 +11,9 @@ sys.path.append('/home/zhongshi/Workspace/bichon/python/debug')
 import prism
 import os
 import scipy
-import quad.bezier as qb
+import bezier as qb
 import tqdm
+from occ_step import cp_write_to_step
 
 def valid_pairing(faces, score, sharp_markers, valid_combine_func):
     tt, tti = igl.triangle_triangle_adjacency(faces)
@@ -49,8 +50,8 @@ def valid_pairing(faces, score, sharp_markers, valid_combine_func):
 
 
 def main(input_file, output_file = None, order =3, level=6, post_check=False):
-    V,F,refV,refF,inpV,mB,mT = h5reader(input_file,
-                                            'mV','mF','ref.V','ref.F','inpV','mbase','mtop')
+    with h5py.File(input_file, 'r') as f:
+        V,F,refV,refF,inpV,mB,mT = map(lambda x:f[x][()], ('mV','mF','ref.V','ref.F','inpV','mbase','mtop'))
 
     ## Bezier fitting
     A = scipy.sparse.coo_matrix(qb.bezier_fit_matrix(order, level)).tocsr()
@@ -68,6 +69,7 @@ def main(input_file, output_file = None, order =3, level=6, post_check=False):
         # Second, check
         v = qb.bezier_check_validity(mB, mT, F[[fi,fo]], quad.reshape(-1,4), np.array([[0,1]]), 
                                  trims, np.array([local_cp]), order,
+                                 valid_check = prism.elevated_positive_check,
                                 progress_bar=False)
 
         return v
@@ -98,6 +100,7 @@ def main(input_file, output_file = None, order =3, level=6, post_check=False):
     cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, A, query)
     if output_file is None:
         output_file = f'/home/zhongshi/ntopo/ntopmodels/fit/{os.path.basename(input_file)}.npz'
+    cp_write_to_step(output_file + '.stp', np.vstack([quad_cp,cc_cp]))
     np.savez(output_file, cp0 = quad_cp, cp1 = cc_cp)
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-from curve import fem_tabulator as feta
+import fem_tabulator as feta
 import numpy as np
 import igl
 import scipy
