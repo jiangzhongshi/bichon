@@ -162,7 +162,7 @@ PrismCage::PrismCage(const RowMatd &vert, const RowMati &face,
       spdlog::error("Something wrong with reorder");
     }
   }
-
+  constraints_per_face.resize(ref.F.rows()); // singular split may increase. TODO: re-assign some of the constraints. 
   for (int i = 0; i < ref.F.rows(); i++) {
     auto [s, mt, shift] =
         tetra_split_AorB({ref.F(i, 0), ref.F(i, 1), ref.F(i, 2)});
