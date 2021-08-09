@@ -209,3 +209,59 @@ def edge_dots(V, F):
     FN  = igl.per_face_normals(V,F, np.ones(3))
     tt, tti = igl.triangle_triangle_adjacency(F)
     return np.einsum('fad,fd->fa',FN[tt],FN)
+
+# BFS traversal
+def group_quads(quads):
+    def quad_connectivity(quads):
+        connect = defaultdict(lambda:[None,None])
+        cnt_tri = 0
+        def set_conn(v0,v1,x):
+            if v0<v1:
+                connect[(v0,v1)][0] = x
+            else:
+                connect[(v1,v0)][1] = x
+        
+        for fi, f in enumerate(quads):
+            ne = len(f)
+            for i in range(ne):
+                set_conn(f[i], f[(i+1)%ne],fi)
+        return connect   
+    def get_conn(connect, v0,v1):
+        return connect[(v0,v1)][0] if v0<v1 else connect[(v1,v0)][1]
+    conn = quad_connectivity(quads)
+    
+    stripe_paint = - np.ones(len(quads), dtype=int)
+    next_color = 0
+    all_stripes = []
+    while stripe_paint.min() < 0:
+        f = np.where(stripe_paint < 0) [0][0]
+        stripe_paint[f] = next_color
+                
+        for e in range(4):
+            v0, v1 = quads[f][[e,(e+1)%4]]
+            f_oppo = conn[(v0,v1)][1] if v0<v1 else conn[(v1,v0)][0]
+            if f_oppo is not None and stripe_paint[f_oppo] == -1:
+                break
+        else:
+            next_color += 1
+            all_stripes.append([(f,0)])
+            continue
+
+        stripe = [(f,(e+3)%4)]
+        vertset = set(list(quads[f]))
+        for _ in range(10):
+            v0, v1 = quads[f][[e,(e+1)%4]]
+            f_oppo = conn[(v0,v1)][1] if v0<v1 else conn[(v1,v0)][0]
+            if f_oppo is None or stripe_paint[f_oppo] >= 0:
+                break
+            vertset = vertset.union(list(quads[f_oppo]))
+            if len(vertset) != 2*(len(stripe)+2):
+                break  # not topology stripe.
+            stripe_paint[f_oppo] = next_color
+            v0id = list(quads[f_oppo]).index(v0)
+            e_next = (v0id + 1) %4
+            f,e = f_oppo, e_next
+            stripe.append((f_oppo, v0id))
+        next_color += 1
+        all_stripes.append(stripe)
+    return stripe_paint, all_stripes

@@ -14,6 +14,7 @@ import scipy
 import bezier as qb
 import tqdm
 from occ_step import cp_write_to_step
+import occ_step
 
 def valid_pairing(faces, score, sharp_markers, valid_combine_func):
     tt, tti = igl.triangle_triangle_adjacency(faces)
@@ -95,13 +96,24 @@ def main(input_file, output_file = None, order =3, level=6, post_check=False):
         for q, (t0,t1) in enumerate(q2t):
             t2q[t0] = q
             t2q[t1] = q
+    # cc_cp = []
     
     new_v, known_cp, newquads = qr.solo_cc_split(V, F, siblings, t2q, quads, quad_cp, order, subd=None)
     cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, A, query)
     if output_file is None:
         output_file = f'/home/zhongshi/ntopo/ntopmodels/fit/{os.path.basename(input_file)}.npz'
     cp_write_to_step(output_file + '.stp', np.vstack([quad_cp,cc_cp]))
-    np.savez(output_file, cp0 = quad_cp, cp1 = cc_cp)
+
+def test_stripe():
+    with np.load('temp.npz') as npl:
+        quads, quad_cp = npl['quads'], npl['quad_cp']
+
+    # quads -- quad_cp
+    stripe_paint, all_stripes = quad_utils.group_quads(quads)
+    print('num of stripes', len(all_stripes))
+
+
+    
 
 if __name__ == '__main__':
     import fire

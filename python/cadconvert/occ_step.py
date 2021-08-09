@@ -44,7 +44,7 @@ def cp_write_to_step(output_file, quad_cp):
 
 
 def compose_bezier(bz_list):
-    bezierarray = TColGeom_Array2OfBezierSurface(1, len(bz_list), 1, 1)
+    bezierarray = TColGeom_Array2OfBezierSurface(1, len(bz_list), 1,1)
     for i,b in enumerate(bz_list):
         bezierarray.SetValue(i+1, 1, b)
     BB = GeomConvert_CompBezierSurfacesToBSplineSurface(bezierarray)
@@ -80,3 +80,20 @@ def test_compose():
     step_writer.Transfer(build.Shape(),STEPControl_AsIs)
     status = step_writer.Write('test.stp')
     
+def stripe_writer(all_stripes, quad_cp, out_file):
+    def rotate(cp, e):
+        return np.rot90(cp.reshape(4,4,3), k=-e)
+    step_writer = STEPControl_Writer()
+    Interface_Static_SetCVal("write.step.schema", "AP203")
+
+    for stripe in all_stripes:
+        s0cp = np.array([rotate(quad_cp[f],e) for f,e in stripe])
+        bzlist = [cp_to_bz(s) for s in s0cp]
+        if len(stripe) > 1:
+            bb = compose_bezier(bzlist)
+        else:
+            bb = bzlist[0]
+        step_writer.Transfer(BRepBuilderAPI_MakeFace(bb, 1e-6).Shape(),
+                            STEPControl_AsIs)
+    status = step_writer.Write(out_file)
+    return status
