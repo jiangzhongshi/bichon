@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
       {"skip_collapse", false},
       {"skip_split", true},
       {"skip_volume", false},
-      {"danger_no_precondition", false},
+      {"danger_relax_precondition", false}, // this is a experiment switch: bypass thresholds in precondition, the result may or may not encounter floating point failures.
   };
   config["tetfill"] = {{"tetwild", true}};
   config["cutet"] = {

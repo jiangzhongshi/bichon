@@ -80,7 +80,7 @@ def test_compose():
     step_writer.Transfer(build.Shape(),STEPControl_AsIs)
     status = step_writer.Write('test.stp')
     
-def stripe_writer(all_stripes, quad_cp, out_file):
+def stripe_writer(out_file, all_stripes, quad_cp):
     def rotate(cp, e):
         return np.rot90(cp.reshape(4,4,3), k=-e)
     step_writer = STEPControl_Writer()

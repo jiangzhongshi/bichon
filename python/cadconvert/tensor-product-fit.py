@@ -96,13 +96,22 @@ def main(input_file, output_file = None, order =3, level=6, post_check=False):
         for q, (t0,t1) in enumerate(q2t):
             t2q[t0] = q
             t2q[t1] = q
-    # cc_cp = []
     
     new_v, known_cp, newquads = qr.solo_cc_split(V, F, siblings, t2q, quads, quad_cp, order, subd=None)
     cc_cp = qr.constrained_cc_fit(V, F, siblings, newquads, known_cp, level, order, A, query)
     if output_file is None:
-        output_file = f'/home/zhongshi/ntopo/ntopmodels/fit/{os.path.basename(input_file)}.npz'
-    cp_write_to_step(output_file + '.stp', np.vstack([quad_cp,cc_cp]))
+        output_file = f'/home/zhongshi/ntopo/ntopmodels/fit/{os.path.basename(input_file)}'
+    _, stripe0 = quad_utils.group_quads(quads)
+    _, stripe1 = quad_utils.group_quads(np.array(newquads))
+    print(f'Quad Counts: {len(quads)} + {len(newquads)}')
+    print(f'Stripe Counts: {len(stripe0)} + {len(stripe1)}')
+    offset = lambda x: (x[0] + len(quads), x[1])
+    occ_step.stripe_writer(output_file + '.stp',
+                 stripe0 + [list(map(offset, stripe)) for stripe in stripe1],
+                 np.vstack([quad_cp,cc_cp]))
+
+    np.savez(output_file + '.npz', quad_cp = quad_cp, cc_cp = cc_cp, quads=quads, newquads=newquads,
+                stripe0=stripe0, stripe1=stripe1)
 
 def test_stripe():
     with np.load('temp.npz') as npl:
@@ -111,9 +120,7 @@ def test_stripe():
     # quads -- quad_cp
     stripe_paint, all_stripes = quad_utils.group_quads(quads)
     print('num of stripes', len(all_stripes))
-
-
-    
+    stripe_writer(all_stripes, 'quad_cp, stripe.stp')
 
 if __name__ == '__main__':
     import fire
