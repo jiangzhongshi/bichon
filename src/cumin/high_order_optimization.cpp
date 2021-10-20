@@ -630,7 +630,7 @@ int cutet_collapse(RowMatd &lagr, RowMati &p4T, double stop_energy) {
   auto n_node = codecs_o4.rows();
   if (n_node != p4T.cols()) {
     spdlog::critical("tet order mismatch");
-    throw 1;
+    throw std::runtime_error("tet order mismatch");
   }
 
   std::vector<Vec3d> vertices(lagr.rows());
@@ -842,11 +842,11 @@ int cutet_collapse(RowMatd &lagr, RowMati &p4T, double stop_energy) {
           auto [val, ign] = mips_energy(nodes35, vec_dxyz, false);
           if (std::isnan(val)) {
             spdlog::critical("PostNAN!!!");
-            throw 1;
+            throw std::runtime_error("PostNAN!!!");
           }
           if (val > 1e8) {
             spdlog::critical("large energy");
-            throw 1;
+            throw std::runtime_error("large energy");
           }
       }
       return true;
@@ -1090,7 +1090,7 @@ int edge_collapsing(RowMatd &lagr, RowMati &p4T, double stop_energy) {
   auto n_node = codecs_o4.rows();
   if (n_node != p4T.cols()) {
     spdlog::critical("tet order mismatch");
-    throw 1;
+    throw std::runtime_error("tet order mismatch");
   }
 
   std::vector<Vec3d> vertices(lagr.rows());

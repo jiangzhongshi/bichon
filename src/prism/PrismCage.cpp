@@ -162,7 +162,7 @@ PrismCage::PrismCage(const RowMatd &vert, const RowMati &face,
       spdlog::error("Something wrong with reorder");
     }
   }
-
+  constraints_per_face.resize(ref.F.rows()); // singular split may increase. TODO: re-assign some of the constraints. 
   for (int i = 0; i < ref.F.rows(); i++) {
     auto [s, mt, shift] =
         tetra_split_AorB({ref.F(i, 0), ref.F(i, 1), ref.F(i, 2)});
@@ -192,7 +192,7 @@ PrismCage::PrismCage(const RowMatd &vert, const RowMati &face,
   for (int i = 0; i < dsF.rows(); i++) {
     auto [s, mt, shift] = tetra_split_AorB({dsF(i, 0), dsF(i, 1), dsF(i, 2)});
     for (int j = 0; j < 3; j++) dsF(i, j) = mt[j];
-    if (mt[1] < num_cons || mt[2] < num_cons) throw 10;
+    if (mt[1] < num_cons || mt[2] < num_cons) throw std::runtime_error("only one vertex in each triangle can be singular.");
   }
 
   ref.aabb.reset(

@@ -54,7 +54,7 @@ bool prism::cage_check::verify_edge_based_track(
         prism::local_validity::identify_zig(meta, f);
     if (rej_id == -10) {
       spdlog::error("Not allow two features in same triangle");
-      throw 1;
+      throw std::runtime_error("Not allow two features in same triangle");
       return false;
     }
     if (rej_id >= 0) {

@@ -347,7 +347,7 @@ constexpr auto valid_curving =
   return false;
 };
 
-auto mean_curv_normals = [](const RowMatd &V, const RowMati &F) {
+auto mean_curv_normals = [](const RowMatd &V, const RowMati &F) { // this is an inactive function for fitting normals.
   using namespace Eigen;
   RowMatd HN;
   SparseMatrix<double> L, M, Minv;

@@ -14,7 +14,7 @@ bool prism::curve::stitch_surface_to_volume(
   for (auto i = 0; i < base.rows(); i++) {
     if (base.row(i) != Vmsh.row(i)) {
       spdlog::critical("Stitch Precondition.");
-      throw 1;
+      throw std::runtime_error("Stitch Precondition.");
     }
   }
   spdlog::info("Setting up stitch: base {}, Fsh {}, Vmsh {} Tmsh {}",
