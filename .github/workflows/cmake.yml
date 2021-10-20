@@ -1,7 +1,7 @@
 name: CMake
 
 on:
-  push:
+  [push, pull_request]:
     branches:
       - main
       - fix-ci
