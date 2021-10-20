@@ -1,10 +1,13 @@
 name: CMake
 
 on:
-  [push, pull_request]:
+  push:
     branches:
       - main
       - fix-ci
+  pull_request:
+    branches:
+      - main
 
 
 env:
