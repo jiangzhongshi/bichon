@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - fix-ci
+  pull_request:
+    branches:
+      - main
 
 
 env:

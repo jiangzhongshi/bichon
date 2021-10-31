@@ -122,7 +122,8 @@ constexpr auto consistent_orientation = [](const RowMati &F) {
 };
 
 bool preconditions(const RowMatd &V, const RowMati &F,
-                   const std::string &filename) {
+                   const std::string &filename, bool shortcircuit=true) {
+  spdlog::info("Preconditions: Checking consistency of input data, with short circuit {}", shortcircuit);
   if (F.rows() == 0) {
     spdlog::error("Precondition: Empty Mesh");
     return false;
@@ -149,26 +150,29 @@ bool preconditions(const RowMatd &V, const RowMati &F,
   double minarea = M.minCoeff() / 2;
   if (minarea < 1e-8) {
     spdlog::error("Precondition: Input {} area small {}", filename, minarea);
-    return false;
+    if (shortcircuit)
+      return false;
   }
   double minangle = min_dihedral_angles(V, F);
   spdlog::info("Minimum Angle {:.18f}", minangle);
   if (minangle < -1 + 0.0006091729809042379) {  // smaller than 2 degree
-    spdlog::error("Precondition: Input {} flat angle", filename);
-    return false;
+    spdlog::error("Precondition: Input {} flat angle {}", filename, minangle);
+    if (shortcircuit)
+      return false;
   }
   // numerical self intersection
   prism::geogram::AABB tree(V, F, true);
   if (tree.numerical_self_intersection(1e-6)) {
     spdlog::error("Precondition: Input {} N-self intersects", filename);
-    return false;
+    if (shortcircuit)
+      return false;
   }
   std::vector<Vec3d> vecV;
   std::vector<Vec3i> vecF;
   eigen2vec(V, vecV);
   eigen2vec(F, vecF);
   if (!prism::spatial_hash::self_intersections(vecV, vecF).empty()) {
-    spdlog::error("Precondition: Input {} self intersects", filename);
+    spdlog::critical("Precondition: Input {} self intersects", filename);
     return false;
   }
   return true;
@@ -511,8 +515,7 @@ void feature_and_curve(std::string filename, std::string fgname,
 
       spdlog::info("V={}, F={}", V.rows(), F.rows());
       put_in_unit_box(V);
-      if (!control_cfg["danger_no_precondition"])
-        if (!preconditions(V, F, filename)) return;
+      if (preconditions(V, F, filename, !control_cfg["danger_relax_precondition"]) ==false) return;
     }
     RowMati feature_edges;
     Eigen::VectorXi feature_corners;
