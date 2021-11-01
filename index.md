@@ -26,7 +26,7 @@ futher research and developement.
 - [Quartic Tetrahedral Meshes (.msh)](https://drive.google.com/file/d/1Gw3vza0GkY0pMf4kLcrOzQeCIlbEp4Cs/view?usp=sharing)
 
 ## Installation via CMake [![CMake](https://github.com/jiangzhongshi/bichon/actions/workflows/cmake.yml/badge.svg)](https://github.com/jiangzhongshi/bichon/actions/workflows/cmake.yml)
-Our system is developed in a Linux 🐧 environment, with GCC-9 and Clang-12, and is tested on macOS 🍏 and ~~Windows~~ (TODO). 
+Our system is developed in a Linux 🐧 environment, with GCC-9 and Clang-12, and is tested on macOS 🍏 and Windows. 
 Please refer to [cmake.yml](.github/workflows/cmake.yml) for a more detailed setup.
 
 ```bash
