@@ -5,11 +5,20 @@ filename: example.md
 --- 
 
 # Hello Bunny
-After installation, you can launch 
-```
+After compilation, you can launch (from the `build/` directory)
+```bash
+wget https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/bunny.off # get the bunny mesh
 ./cumin_bin -i bunny.off -o ./
 ```
-And you will have `bunny.off.h5` generated in the current directory.
+To obtain `bunny.off.h5` in the current directory.
+
+## Conversion
+We provide a simple script to convert from our format to be compatible with [gmsh](https://gmsh.info/doc/texinfo/gmsh.html) visualizer for a visualization similar to Fig.4 in our paper.
+
+Requiring python packages `pip install meshio h5py numpy`
+```bash
+python ../python/format_utils.py bunny.off.h5 bunny.msh
+```
 
 # Visualize
 The recommended way to visualize the output file is using the python
