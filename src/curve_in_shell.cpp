@@ -84,10 +84,11 @@ int main(int argc, char **argv) {
       {"skip_volume", false},
       {"danger_relax_precondition", false}, // this is a experiment switch: bypass thresholds in precondition, the result may or may not encounter floating point failures.
   };
-  config["tetfill"] = {{"tetwild", true}};
+  config["tetfill"] = {{"tetwild", true}, {"skip", false}};
   config["cutet"] = {
       {"debug", false},
       {"passes", 6},
+      {"smooth_only",false},
       {"smooth_iter", 4},
       {"energy_threshold", 100},
   };

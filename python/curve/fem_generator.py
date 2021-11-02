@@ -13,47 +13,47 @@ import numpy as np
 def codecs():
     def codec_to_n(co): return [k for i, j in enumerate(co) for k in [i+1]*j]
 
-    # print(np.array2string(tetra35_codec_n,separator=',').replace('[','{').replace(']','}') )
     def decompose_x(x): return np.array([list(map(int, c))
                                          for c in x.split(',')])
-    # Quadratic Codec
-    tri6 = '00,11,22,01,12,02'
-    tri6_n = decompose_x(tri6)
+    # P2 Quadratic Codec
+    tri6_codec = '00,11,22,01,12,02'
+    tri6_n = decompose_x(tri6_codec)
     tri6_op = np.eye(3)[tri6_n].mean(axis=1)
+    tetra10_codec = '00,11,22,33,01,12,02,03,13,23'
+    tetra10_codec_n = decompose_x(tetra10_codec)
+    tetra10_op = np.eye(4)[tetra10_codec_n].mean(axis=1)
 
-    # Cubic Codecs
+    # P3 Cubic Codecs
     tetra20_codec = '000,111,222,333,001,011,112,122,022,002,033,003,233,223,133,113,012,013,023,123'
     tri10_codec = '000,111,222,001,011,112,122,022,002,012'
 
-    tetra20_codec_n = np.array([list(map(int, c))
-                                for c in tetra20_codec.split(',')])
+    tetra20_codec_n = decompose_x(tetra20_codec)
     tetra20_op = np.eye(4)[tetra20_codec_n].mean(axis=1)
-    tri10_codec_n = np.array([list(map(int, c))
-                              for c in tri10_codec.split(',')])
+    tri10_codec_n = decompose_x(tri10_codec)
     tri10_op = np.eye(3)[tri10_codec_n].mean(axis=1)
 
-    # Quartic Codecs
+    # P4 Quartic Codecs
     tetra35_codec = '0000,1111,2222,3333,0001,0011,0111,1112,1122,1222,0222,0022,0002,0333,0033,0003,2333,2233,2223,1333,1133,1113,0012,0122,0112,0013,0113,0133,0023,0233,0223,1233,1123,1223,0123'
-    tetra35_codec_n = np.array([list(map(int, c))
-                                for c in tetra35_codec.split(',')])
+    tetra35_codec_n = decompose_x(tetra35_codec)
     tetra35_op = np.eye(4)[tetra35_codec_n].mean(axis=1)
     tri15_codec = '0000,1111,2222,0001,0011,0111,1112,1122,1222,0222,0022,0002,0012,0122,0112'
-    tri15_codec_n = np.array([list(map(int, c))
-                              for c in tri15_codec.split(',')])
+    tri15_codec_n = decompose_x(tri15_codec)
     tri15_op = np.eye(3)[tri15_codec_n].mean(axis=1)
 
     tetra35_vtk = '0000,1111,2222,3333,0001,0011,0111,1112,1122,1222,0222,0022,0002,0003,0033,0333,1113,1133,1333,2223,2233,2333,0013,0113,0133,1223,1233,1123,0023,0233,0223,0012,0122,0112,0123'
-    wedge18_codec = '''0000,1111,2222,3333,4444,5555,0011,0022,0033,1122,1144,2255,3344,3355,4455,0134,0235,1245'''
-    p1wedge = np.array([[0., 0., 0.],
-                        [1., 0., 0.],
-                        [0., 1., 0.],
-                        [0., 0., 1.],
-                        [1., 0., 1.],
-                        [0., 1., 1.]])
-    wedge18_codec_n = np.array([list(map(int, w))
-                                for i, w in enumerate(wedge18_codec.split(','))])
-    wedge_elev_op = np.eye(6)[wedge18_codec_n].mean(axis=1) @ p1wedge
-    return dict(tri6=[tri6, tri6_n, tri6_op],
+    
+#     wedge18_codec = '''0000,1111,2222,3333,4444,5555,0011,0022,0033,1122,1144,2255,3344,3355,4455,0134,0235,1245'''
+#     p1wedge = np.array([[0., 0., 0.],
+#                         [1., 0., 0.],
+#                         [0., 1., 0.],
+#                         [0., 0., 1.],
+#                         [1., 0., 1.],
+#                         [0., 1., 1.]])
+#     wedge18_codec_n = decompose_x(wedge18_codec)
+#     wedge_elev_op = np.eye(6)[wedge18_codec_n].mean(axis=1) @ p1wedge
+    
+    return dict(tri6=[tri6_codec, tri6_n, tri6_op],
+                tetra10 = [tetra10_codec, tetra10_codec_n, tetra10_op],
                 tetra20=[tetra20_codec, tetra20_codec_n, tetra20_op],
                 tri10=[tri10_codec, tri10_codec_n, tri10_op],
                 tetra35=[tetra35_codec, tetra35_codec_n, tetra35_op],

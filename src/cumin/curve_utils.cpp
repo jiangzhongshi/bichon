@@ -706,7 +706,7 @@ void prism::curve::HelperTensors::init(int tri_order, int level) {
     spdlog::critical(
         "The file for (high order) helper matrices are not present. \
      Try to use `python/cumin_datagen.py` to generate them for higher order meshes. \
-      Program Aborting!");
+      Program Aborting...");
     exit(1);
   }
   RowMatd bern_from_lagr_o9, bern_from_lagr_o4;

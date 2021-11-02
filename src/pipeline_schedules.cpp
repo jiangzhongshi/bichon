@@ -30,7 +30,8 @@ void localcurve_pass(const PrismCage &pc,
                      const prism::local::RemeshOptions &option);
 }
 auto post_collapse = [](auto &complete_cp) {
-  if (complete_cp.empty()) return;
+  if (complete_cp.empty())
+    return;
   complete_cp.erase(std::remove_if(complete_cp.begin(), complete_cp.end(),
                                    [](auto &c) { return c(0, 0) == -1; }),
                     complete_cp.end());
@@ -39,7 +40,8 @@ auto post_collapse = [](auto &complete_cp) {
 auto reverse_feature_order = [](PrismCage &pc,
                                 prism::local::RemeshOptions &option) {
   decltype(pc.meta_edges) meta;
-  if (pc.meta_edges.empty()) return;
+  if (pc.meta_edges.empty())
+    return;
   for (auto [a, b] : pc.meta_edges) {
     auto a1 = std::pair{a.second, a.first};
     auto b1 = b;
@@ -50,7 +52,8 @@ auto reverse_feature_order = [](PrismCage &pc,
 };
 
 auto checker_in_main = [](const auto &pc, const auto &option, bool enable) {
-  if (!enable) return;
+  if (!enable)
+    return;
   auto require = [&](bool b) {
     if (b == false) {
       spdlog::dump_backtrace();
@@ -81,7 +84,8 @@ double min_dihedral_angles(const RowMatd &V, const RowMati &F) {
   igl::triangle_triangle_adjacency(F, TT, TTi);
   for (int i = 0; i < F.rows(); i++) {
     for (int j = 0; j < 3; j++) {
-      if (TT(i, j) == -1) continue;
+      if (TT(i, j) == -1)
+        continue;
       double a = FN.row(TT(i, j)).dot(FN.row(i));
       minangle = std::min(minangle, a);
     }
@@ -114,7 +118,8 @@ constexpr auto consistent_orientation = [](const RowMati &F) {
   for (auto i = 0; i < F.rows(); i++) {
     for (auto j = 0; j < 3; j++) {
       auto v0v1 = std::pair(F(i, j), F(i, (j + 1) % 3));
-      if (half_edges.find(v0v1) != half_edges.end()) return false;
+      if (half_edges.find(v0v1) != half_edges.end())
+        return false;
       half_edges.insert(v0v1);
     }
   }
@@ -122,8 +127,10 @@ constexpr auto consistent_orientation = [](const RowMati &F) {
 };
 
 bool preconditions(const RowMatd &V, const RowMati &F,
-                   const std::string &filename, bool shortcircuit=true) {
-  spdlog::info("Preconditions: Checking consistency of input data, with short circuit {}", shortcircuit);
+                   const std::string &filename, bool shortcircuit = true) {
+  spdlog::info("Preconditions: Checking consistency of input data, with short "
+               "circuit {}",
+               shortcircuit);
   if (F.rows() == 0) {
     spdlog::error("Precondition: Empty Mesh");
     return false;
@@ -155,7 +162,7 @@ bool preconditions(const RowMatd &V, const RowMati &F,
   }
   double minangle = min_dihedral_angles(V, F);
   spdlog::info("Minimum Angle {:.18f}", minangle);
-  if (minangle < -1 + 0.0006091729809042379) {  // smaller than 2 degree
+  if (minangle < -1 + 0.0006091729809042379) { // smaller than 2 degree
     spdlog::error("Precondition: Input {} flat angle {}", filename, minangle);
     if (shortcircuit)
       return false;
@@ -312,6 +319,8 @@ void cutet_optim(RowMatd &lagr, RowMati &p4T, nlohmann::json config) {
   auto passes = config["passes"];
   auto smoothingIt = config["smooth_iter"];
   auto newEnergyThres = config["energy_threshold"];
+  auto smooth_only = config["smooth_only"];
+
   auto threadNum = -1;
   igl::Timer igl_timer;
   igl_timer.start();
@@ -357,22 +366,25 @@ void cutet_optim(RowMatd &lagr, RowMati &p4T, nlohmann::json config) {
       e.mean(), e.minCoeff(), e.maxCoeff(), e.size());
 
   // optimization
-  if (threadNum == -1) threadNum = 16;
+  if (threadNum == -1)
+    threadNum = 16;
+  int col = -1, swa = -1;
   for (int pass = 1; pass <= passes; pass++) {
     spdlog::info("======== Optimization Pass {}/{} ========", pass, passes);
+    if (!smooth_only) {
+      col = prism::curve::cutet_collapse(lagr, p4T, newEnergyThres);
+      if (debugMode)
+        InversionCheckForAll(fmt::format("Pass {} after collapsing", pass));
 
-    int col = prism::curve::cutet_collapse(lagr, p4T, newEnergyThres);
-    if (debugMode)
-      InversionCheckForAll(fmt::format("Pass {} after collapsing", pass));
-
-    int swa = prism::curve::cutet_swap(lagr, p4T, newEnergyThres);
-    if (debugMode)
-      InversionCheckForAll(fmt::format("Pass {} after swapping", pass));
-
+      swa = prism::curve::cutet_swap(lagr, p4T, newEnergyThres);
+      if (debugMode)
+        InversionCheckForAll(fmt::format("Pass {} after swapping", pass));
+    }
     prism::curve::vertex_star_smooth(lagr, p4T, smoothingIt, threadNum);
     if (debugMode)
       InversionCheckForAll(fmt::format("Pass {} after smoothing", pass));
-    if (col + swa == 0) break;
+    if (col + swa == 0)
+      break;
   }
 
   // post-optimization check
@@ -395,7 +407,8 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
 
   RowMatd VN = mT - mB;
   for (auto i = 0; i < VN.rows(); i++) {
-    if (mT.row(i) == mB.row(i)) VN.row(i).setZero();
+    if (mT.row(i) == mB.row(i))
+      VN.row(i).setZero();
     VN.row(i) = VN.row(i).normalized();
   }
 
@@ -416,8 +429,8 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   spdlog::debug("Tmsh {}", Tmsh.rows());
   std::vector<Eigen::VectorXi> T1;
   for (auto l = 0; l < labels.size(); l++) {
-      if (labels[l] == 1)
-          T1.emplace_back(Tmsh.row(l));
+    if (labels[l] == 1)
+      T1.emplace_back(Tmsh.row(l));
   }
   vec2eigen(T1, Tmsh);
 
@@ -430,8 +443,8 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   RowMatd nodes;
   RowMati p4T;
 
-  prism::curve::stitch_surface_to_volume(
-      mB, mT, mF, complete_cp, Vmsh, Tmsh, nodes, p4T);
+  prism::curve::stitch_surface_to_volume(mB, mT, mF, complete_cp, Vmsh, Tmsh,
+                                         nodes, p4T);
 
   cutet_optim(nodes, p4T, config["cutet"]);
 };
@@ -469,7 +482,7 @@ void feature_and_curve(std::string filename, std::string fgname,
     Eigen::VectorXi feature_corners;
     Eigen::VectorXi points_fid;
     RowMatd points_bc;
-    if (fgname == "") {  // no feature file, use threshold mark.
+    if (fgname == "") { // no feature file, use threshold mark.
       spdlog::info("Use dihedral threshold {} to mark features",
                    dihedral_threshold);
       prism::mark_feature_edges(V, F, dihedral_threshold, feature_edges);
@@ -491,7 +504,7 @@ void feature_and_curve(std::string filename, std::string fgname,
   auto pc = std::unique_ptr<PrismCage>(nullptr);
   auto complete_cp = std::vector<RowMatd>();
   auto ext = std::filesystem::path(filename).extension();
-  if (ext == ".init" || ext == ".h5") {  // loading.
+  if (ext == ".init" || ext == ".h5") { // loading.
     pc.reset(new PrismCage(filename));
     if (ext == ".h5") {
       if (!control_cfg["reset_cp"] && control_cfg["enable_curve"])
@@ -499,23 +512,26 @@ void feature_and_curve(std::string filename, std::string fgname,
     }
   }
 
-  if (pc == nullptr) {  // initialize shell.
+  if (pc == nullptr) { // initialize shell.
     RowMatd V;
     RowMati F;
     {
       igl::read_triangle_mesh(filename, V, F);
-      if (fgname == "") {  // no feature, stl file TODO: branch can be merged,
-                           // subject to futher feature cleaning.
+      if (fgname == "") { // no feature, stl file TODO: branch can be merged,
+                          // subject to futher feature cleaning.
         Eigen::VectorXi SVI, SVJ;
-        RowMatd temp_V = V;  // for STL file
+        RowMatd temp_V = V; // for STL file
         igl::remove_duplicate_vertices(temp_V, 0, V, SVI, SVJ);
         for (int i = 0; i < F.rows(); i++)
-          for (int j : {0, 1, 2}) F(i, j) = SVJ[F(i, j)];
+          for (int j : {0, 1, 2})
+            F(i, j) = SVJ[F(i, j)];
       }
 
       spdlog::info("V={}, F={}", V.rows(), F.rows());
       put_in_unit_box(V);
-      if (preconditions(V, F, filename, !control_cfg["danger_relax_precondition"]) ==false) return;
+      if (preconditions(V, F, filename,
+                        !control_cfg["danger_relax_precondition"]) == false)
+        return;
     }
     RowMati feature_edges;
     Eigen::VectorXi feature_corners;
@@ -523,10 +539,12 @@ void feature_and_curve(std::string filename, std::string fgname,
     RowMatd points_bc;
     std::tie(feature_corners, feature_edges, points_fid, points_bc) =
         parse_feature_file(V, F, fgname);
-    if (!check_feature_valid(V, F, feature_corners, feature_edges)) return;
+    if (!check_feature_valid(V, F, feature_corners, feature_edges))
+      return;
 
     std::vector<int> face_parent(F.rows());
-    for (auto fi = 0; fi < F.rows(); fi++) face_parent[fi] = fi;
+    for (auto fi = 0; fi < F.rows(); fi++)
+      face_parent[fi] = fi;
     RowMatd origV = V;
     RowMati origF = F;
     prism::feature_pre_split(V, F, feature_edges, pre_split_threshold,
@@ -537,10 +555,12 @@ void feature_and_curve(std::string filename, std::string fgname,
            Eigen::VectorXi &points_fid, RowMatd &points_bc) {
           auto eval_bc = [](auto &V, auto &f, auto &bc) {
             Vec3d pos = Vec3d::Zero();
-            for (auto k = 0; k < 3; k++) pos += V.row(f[k]) * bc[k];
+            for (auto k = 0; k < 3; k++)
+              pos += V.row(f[k]) * bc[k];
             return pos;
           };
-          if (points_fid.size() == 0) return;
+          if (points_fid.size() == 0)
+            return;
           std::vector<std::vector<int>> face_map(oF.rows());
           for (auto i = 0; i < face_parent.size(); i++)
             face_map[face_parent[i]].push_back(i);
@@ -579,9 +599,8 @@ void feature_and_curve(std::string filename, std::string fgname,
                                     points_bc);
 
     pc.reset(new PrismCage(V, F, std::move(feature_edges),
-                           std::move(feature_corners), 
-                           std::move(points_fid), std::move(points_bc),
-                           initial_thickness,
+                           std::move(feature_corners), std::move(points_fid),
+                           std::move(points_bc), initial_thickness,
                            PrismCage::SeparateType::kShell));
     prism::cage_check::initial_trackee_reconcile(
         *pc, shell_cf["distortion_bound"].get<double>());
@@ -589,7 +608,8 @@ void feature_and_curve(std::string filename, std::string fgname,
     spdlog::info("=====Initial Good. Saving.", ser_file);
     pc->serialize(ser_file + ".init");
   }
-  if (control_cfg["only_initial"]) return;
+  if (control_cfg["only_initial"])
+    return;
 
   auto chains = prism::recover_chains_from_meta_edges(pc->meta_edges);
   spdlog::info("chains size {}", chains.size());
@@ -597,7 +617,7 @@ void feature_and_curve(std::string filename, std::string fgname,
       complete_cp.size() != pc->F.size()) {
     spdlog::info("order {} Reset CP", order);
     complete_cp =
-        prism::curve::initialize_cp(pc->mid, pc->F, codecs_gen_id(order,2));
+        prism::curve::initialize_cp(pc->mid, pc->F, codecs_gen_id(order, 2));
   }
   if (pc->ref.inpV.rows() == 0) {
     spdlog::info("resetting inpV");
@@ -618,8 +638,8 @@ void feature_and_curve(std::string filename, std::string fgname,
   option.curve_normal_bound = normal_th;
   option.linear_curve = true;
   if (control_cfg["enable_curve"]) {
-    option.curve_checker = prism::curve::curve_func_handles(
-        complete_cp, *pc, option, order);
+    option.curve_checker =
+        prism::curve::curve_func_handles(complete_cp, *pc, option, order);
   }
 
   auto checker = [&option, &pc](bool enable) {
@@ -663,7 +683,7 @@ void feature_and_curve(std::string filename, std::string fgname,
     checker(serialize_level > 3);
   };
   auto refine = [&](auto q) {
-    if (q) {  // try to refine everything if quality improves.
+    if (q) { // try to refine everything if quality improves.
       option.relax_quality_threshold = 0;
       option.sizing_field = [](auto &) { return 0.02; };
     } else {
@@ -696,14 +716,17 @@ void feature_and_curve(std::string filename, std::string fgname,
   };
   for (int collapse_iteration = 0; collapse_iteration < 10;
        collapse_iteration++) {
-    if (control_cfg["skip_collapse"]) break;
-    if (collapse_iteration == 1) option.linear_curve = false;
+    if (control_cfg["skip_collapse"])
+      break;
+    if (collapse_iteration == 1)
+      option.linear_curve = false;
     spdlog::info("===Collapse Iteration {}", collapse_iteration);
     auto col = collapse();
     relax();
     refine(true);
     relax();
-    if (col == 0) break;
+    if (col == 0)
+      break;
     reverse_feature_order(*pc, option);
     if (serialize_level > 4)
       pc->serialize(fmt::format("{}_col{}.h5", ser_file, collapse_iteration),
@@ -717,7 +740,8 @@ void feature_and_curve(std::string filename, std::string fgname,
 
   // Start split schedule.
   for (int split_iteration = 0; split_iteration < 10; split_iteration++) {
-    if (control_cfg["skip_split"]) break;
+    if (control_cfg["skip_split"])
+      break;
     auto spl = refine(split_iteration > 4);
     for (int inside_improve_iteration = 0; inside_improve_iteration < 3;
          inside_improve_iteration++) {
@@ -730,14 +754,16 @@ void feature_and_curve(std::string filename, std::string fgname,
                                   split_iteration, inside_improve_iteration),
                       prism::curve::save_cp(complete_cp));
     }
-    if (spl == 0) break;
+    if (spl == 0)
+      break;
     if (serialize_level > 4)
       pc->serialize(fmt::format("{}_spl{}.h5", ser_file, split_iteration),
                     prism::curve::save_cp(complete_cp));
   }
   spdlog::info("========Finalize: Save.======");
   pc->serialize(ser_file, prism::curve::save_cp(complete_cp));
-  if (control_cfg["skip_volume"]) return;
+  if (control_cfg["skip_volume"])
+    return;
   checker_inversion(*pc, complete_cp);
   spdlog::info("========Vol Stage======");
 

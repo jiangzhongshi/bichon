@@ -421,6 +421,7 @@ prism::curve::curve_func_handles(std::vector<RowMatd> &complete_cp,
     auto residual_test =
         [&pc, &moved_tris, &old_nb, &inpV, &tri_codec_v, &poisson_on_face, &poisson_uv,
          dist_th = option.curve_dist_bound](std::vector<RowMatd> &cp) -> bool {
+        if (dist_th < 0) return true;
       constexpr auto enable_polyshell = false;
       assert(cp.size() == moved_tris.size());
       auto inverse_project_discrete =

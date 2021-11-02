@@ -46,13 +46,13 @@ N=5
 sample_pts = np.asarray(list(filter(lambda x: sum(x) == N, itertools.product(range(N+1), repeat=4))))[:,1:]/N
 
 
-for order in range(3,10):
+for order in range(1,10):
     tet_o = fem_generator.basis_info(order=order, nsd=3, derivative=False)
     bern_from_lag = tet_o['l2b']
     with h5py.File(f'../python/curve/data/tetra_o{order}_l2b.h5','w') as f:
         f['l2b'] = bern_from_lag
 
-for order in range(2,6):
+for order in range(6):
     tet_o = fem_generator.basis_info(order=order+1, nsd=3, derivative=True)
     bern_from_lag = tet_o['l2b']
     with h5py.File(f'../python/curve/data/p{order+1}_quniform{N}_dxyz.h5','w') as f:
