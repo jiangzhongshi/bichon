@@ -8,6 +8,7 @@
 #include <prism/PrismCage.hpp>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+#include "prism/geogram/AABB_tet.hpp"
 TEST_CASE("segment test") {
   using namespace Eigen;
   auto file =
@@ -101,4 +102,20 @@ TEST_CASE("aabb singularity") {
       num_inter++;
   }
   CHECK(num_inter == 62);
+}
+
+TEST_CASE("tet AABB") {
+  RowMatd V(4,3);
+  RowMati T(1,4);
+  V << 0,0,0,1,0,0,0,1,0,0,0,1;
+  T<< 0,1,2,3;
+  auto tree = prism::geogram::AABB_tet(V,T);
+//   rand_bc = np.random.rand(20).reshape(-1,4)
+// rand_bc /= rand_bc.sum(axis=1,keepdims=True)
+
+// tid, re_bc = tree.point_bc(rand_bc@tet_v0[tet_t0[2]])
+
+// np.linalg.norm(re_bc -  rand_bc)
+  auto [tid, bc] = tree.point_query(Vec3d(0,0,0));
+  CHECK_EQ(tid, 0);
 }

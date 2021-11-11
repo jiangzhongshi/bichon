@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include <igl/AABB.h>
 #include <prism/geogram/AABB.hpp>
+#include <prism/geogram/AABB_tet.hpp>
 #include <prism/intersections.hpp>
 #include <prism/common.hpp>
 #include <prism/spatial-hash/self_intersection.hpp>
@@ -97,6 +98,21 @@ void python_export_spatial(py::module& m) {
           return std::tuple(-1, 0., 0., -1.);
       });
 
+    py::class_<prism::geogram::AABB_tet> AABB_tet(m, "AABB_tet");
+    AABB_tet.def(py::init<const Eigen::MatrixXd&, const Eigen::MatrixXi&>())
+    .def("point_bc", [](const prism::geogram::AABB_tet& self, const Eigen::MatrixXd& pts){
+      auto n = pts.rows();
+      Eigen::VectorXi tets_id = Eigen::VectorXi::Constant(n, -1);
+      Eigen::MatrixXd all_bc(n, 4);
+      for (int i=0; i<n; i++ ){
+        auto [tid, bc] = self.point_query(pts.row(i));
+        tets_id(i) = tid;
+        all_bc.row(i) = bc;
+      }
+      return std::tuple(tets_id, all_bc);
+    }
+
+    );
      m.def("self_intersect", []
     ( const Eigen::MatrixXd & V,
     const Eigen::MatrixXi& F)->bool {
