@@ -1,7 +1,6 @@
 import numpy as np
 from collections import defaultdict
 import scipy
-import tqdm
 import igl
 
 
