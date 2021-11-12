@@ -1,5 +1,5 @@
-#ifndef PRISM_CGAL_AABB_HPP
-#define PRISM_CGAL_AABB_HPP
+#ifndef PRISM_GEOGRAM_AABB_HPP
+#define PRISM_GEOGRAM_AABB_HPP
 
 #include <memory>
 #include <optional>
@@ -43,6 +43,7 @@ struct AABB {
   int num_freeze = 0;
   const bool enabled = true;
 };
+
 
 } // namespace prism::geogram
 

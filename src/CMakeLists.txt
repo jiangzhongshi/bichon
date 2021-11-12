@@ -13,6 +13,7 @@ PRIVATE
     # prism/cgal/tetrahedron_tetrahedron_intersection.cpp
     prism/cgal/QP.cpp
     prism/geogram/AABB.cpp
+    prism/geogram/AABB_tet.cpp
     prism/phong/projection.cpp
     prism/phong/trilinear_projection.cpp
     prism/phong/tangent_orientation.cpp
