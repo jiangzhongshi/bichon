@@ -3,6 +3,24 @@ import meshio
 import h5py
 import numpy as np
 
+def test_convert():
+    import curve.fem_generator as feta
+
+    gmsh_c = feta.basis_info(order=2, nsd=3, force_codec='tetra10')['codec']
+
+    auto_c = feta.basis_info(order=2, nsd=3)['codec']
+
+    np.lexsort(np.array(auto_c).T)[
+        feta.invert_permutation(
+        np.lexsort(np.array(gmsh_c).T))]
+
+    pts = np.eye(4)[:,1:]
+
+    codec = np.array([list(map(int,x)) for x in '00,11,22,33,01,12,02,03,13,23'.split(',')])
+
+    meshio.write_points_cells('temp.msh', 
+                              points=pts[codec].mean(axis=1), 
+                              cells=[('tetra10',np.arange(10).reshape(1,-1))])
 
 def convert_cutet(file1, file2):
     # a handy conversion for the default output mesh (p4).

@@ -19,7 +19,7 @@ auto prism::local_validity::identify_zig(
     auto v0 = f[j], v1 = f[(j + 1) % 3];
     auto it0 = meta_edges.find({v0, v1});
     auto it1 = meta_edges.find({v1, v0});
-    if (it0 == it1)
+    if (it0 == it1) // == end iterator. i.e. not found.
       continue;
     if (cid >= 0) {
       spdlog::trace("two feat would be in one triangle");
