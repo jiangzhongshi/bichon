@@ -15,6 +15,7 @@
 #include <prism/predicates/inside_octahedron.hpp>
 #include <prism/predicates/triangle_triangle_intersection.hpp>
 #include <queue>
+#include <stdexcept>
 #include <vector>
 
 #include "../energy/map_distortion.hpp"
@@ -154,7 +155,7 @@ bool volume_check(const std::vector<Vec3d> &base, const std::vector<Vec3d> &mid,
   auto checker = [](const std::array<Vec3d, 6> &a,
                     const std::array<bool, 3> &c) {
     return prism::predicates::positive_prism_volume(a, c);
-  // return prism::predicates::positive_nonlinear_prism(a,c);
+    // return prism::predicates::positive_nonlinear_prism(a,c);
   };
   for (auto [v0, v1, v2] : tris) {
     // auto checker = [tc = (v1 > v2 ? TETRA_SPLIT_A : TETRA_SPLIT_B)](
@@ -371,10 +372,11 @@ distort_check(const std::vector<Vec3d> &base,
               const std::set<int> &combined_trackee, // indices to ref.F tracked
               const RowMatd &refV, const RowMati &refF, double distortion_bound,
               int num_freeze, bool bundled_intersection) {
-                // ANCHOR: 80% bottleneck for no-curve pipeline.
-                // reduce the predicates would go a long way 
-                // Possible improvements: 1. check walls, instead of cells and fill in topologically
-                // 2. Parallel
+  // ANCHOR: 80% bottleneck for no-curve pipeline.
+  // reduce the predicates would go a long way
+  // Possible improvements: 1. check walls, instead of cells and fill in
+  // topologically
+  // 2. Parallel
   // NormalCheck
   spdlog::trace("In NC ct#{}, tris{}", combined_trackee.size(), tris.size());
   igl::Timer timer;
@@ -423,9 +425,8 @@ distort_check(const std::vector<Vec3d> &base,
         std::swap(ref_tri[0], ref_tri[ri]);
       } else
         intersected_prism =
-            prism::triangle_intersect_octahedron(base_vert, mid_vert,
-                                                  oct_type_bot, ref_tri,
-                                                  num_freeze > v0) ||
+            prism::triangle_intersect_octahedron(
+                base_vert, mid_vert, oct_type_bot, ref_tri, num_freeze > v0) ||
             prism::triangle_intersect_octahedron(
                 mid_vert, top_vert, oct_type_top, ref_tri, num_freeze > v0);
       if (!intersected_prism) {
@@ -515,45 +516,51 @@ distort_check(const std::vector<Vec3d> &base,
   return distributed_refs;
 }
 
-auto find_rejection_trackee =[](const RowMati& F,const std::vector<std::vector<int>>& VF,const auto&VFi, const std::vector<int>& seg,
-    auto it0, auto it1) -> std::set<int>{
-      it1--;
+auto find_rejection_trackee = [](const RowMati &F,
+                                 const std::vector<std::vector<int>> &VF,
+                                 const auto &VFi, const std::vector<int> &seg,
+                                 auto it0, auto it1) -> std::set<int> {
+  it1--;
   assert(seg.size() >= 2);
   if (seg.size() == 2) {
-    auto v0 = *it0,v1 = *it1;
-    spdlog::trace("v0 {} v1 {}",v0,v1);
-    auto&nb = VF[v0];
-    auto&nbi = VFi[v0];
-    for (auto i=0; i<nb.size(); i++) {
-       auto f0 = nb[i];
-        auto e0 = nbi[i];
-        if (F(f0,e0) != v0) throw std::runtime_error("v0 wrong");
-        if (F(f0,(e0+2)%3) == v1) {
-          return {f0};
-        }
+    auto v0 = *it0, v1 = *it1;
+    spdlog::trace("v0 {} v1 {}", v0, v1);
+    auto &nb = VF[v0];
+    auto &nbi = VFi[v0];
+    for (auto i = 0; i < nb.size(); i++) {
+      auto f0 = nb[i];
+      auto e0 = nbi[i];
+      if (F(f0, e0) != v0)
+        throw std::runtime_error("v0 wrong");
+      if (F(f0, (e0 + 2) % 3) == v1) {
+        return {f0};
+      }
     }
-    std::runtime_error("Not found the triangle opposite to feature.");
+    throw std::runtime_error("Not found the triangle opposite to feature.");
     return {};
   }
 
   std::set<int> reject_faces;
-  it0 ++ ;
-  for (;it0 != it1; it0++){ 
+  it0++;
+  for (; it0 != it1; it0++) {
     auto v0 = *it0;
     auto vp = *std::prev(it0);
     auto vn = *std::next(it0);
-    auto&nb = VF[v0];
-    auto&nbi = VFi[v0];
+    auto &nb = VF[v0];
+    auto &nbi = VFi[v0];
     auto start = -1, end = -1;
-    for (auto i=0; i<nb.size(); i++) {
-        auto f0 = nb[i];
-        auto e0 = nbi[i];
-        if (F(f0, (e0+1)%3) == vp) start = i;
-        if (F(f0, (e0+2)%3) == vn) end = i;
+    for (auto i = 0; i < nb.size(); i++) {
+      auto f0 = nb[i];
+      auto e0 = nbi[i];
+      if (F(f0, (e0 + 1) % 3) == vp)
+        start = i;
+      if (F(f0, (e0 + 2) % 3) == vn)
+        end = i;
     }
-    if (end < start) end += nb.size();
-    for (auto i=start; i<= end; i++) {
-        reject_faces.insert(nb[i%nb.size()]);
+    if (end < start)
+      end += nb.size();
+    for (auto i = start; i <= end; i++) {
+      reject_faces.insert(nb[i % nb.size()]);
     }
   }
   return reject_faces;
@@ -582,15 +589,17 @@ bool feature_handled_distort_check(const PrismCage &pc,
       auto it0 = pc.meta_edges.find({v0, v1});
       auto it1 = pc.meta_edges.find({v1, v0});
 
-      if (it0 == it1) continue;
+      if (it0 == it1)
+        continue;
       bool left = false;
-      if (it0 != pc.meta_edges.end()) {  // left
+      if (it0 != pc.meta_edges.end()) { // left
         left = true;
-      } else {  // right
+      } else { // right
         it0 = it1;
       }
       auto &seg = it0->second.second;
       auto reject = std::set<int>();
+      if (seg.empty()) throw std::runtime_error("empty segs. This is ok, but next line should change.");
       if (left)
         reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, seg,
                                         seg.begin(), seg.end());
@@ -608,7 +617,7 @@ bool feature_handled_distort_check(const PrismCage &pc,
     if (sub_ref && sub_ref.value()[0].size() > 0) {
       sub_trackee[i] = sub_ref.value()[0];
     } else {
-    return false;
+      return false;
     }
   }
   for (auto &s : sub_trackee)
@@ -716,7 +725,16 @@ int prism::local_validity::attempt_zig_remesh(
       return 9;
     if (rej_id >= 0) {
       auto remain_track = std::set<int>();
-      set_minus(combined_tracks, option.chain_reject_trackee[rej_id],
+      auto reject = std::set<int>();
+      auto left = rej_id % 2 == 0;
+      if (left)
+        reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
+                                        segs.begin(), segs.end());
+      else
+        reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
+                                        segs.rbegin(), segs.rend());
+
+      set_minus(combined_tracks, reject,
                 remain_track);
 
       spdlog::trace("rej_id {}", rej_id); // 2*cid +0/1
