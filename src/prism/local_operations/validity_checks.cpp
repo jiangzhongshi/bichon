@@ -26,6 +26,7 @@
 #include "../spatial-hash/AABB_hash.hpp"
 #include "local_mesh_edit.hpp"
 #include "prism/PrismCage.hpp"
+#include "prism/common.hpp"
 #include "prism/polyshell_utils.hpp"
 #include "remesh_pass.hpp"
 
@@ -516,27 +517,32 @@ distort_check(const std::vector<Vec3d> &base,
   return distributed_refs;
 }
 
-auto find_rejection_trackee = [](const RowMati &F,
-                                 const std::vector<std::vector<int>> &VF,
-                                 const auto &VFi, const std::vector<int> &seg,
-                                 auto it0, auto it1) -> std::set<int> {
-  it1--;
+/// @brief find set of triangles to reject adjacent to the feature
+/// @note 
+template <typename T>
+auto find_rejection_trackee(const RowMati &F,
+                            const std::vector<std::vector<int>> &VF,
+                            const std::vector<std::vector<int>> &VFi,
+                            const std::vector<int> &seg,
+                            T it0,
+                            T it1) -> std::set<int> {
+  it1--; // end to back
   assert(seg.size() >= 2);
+  spdlog::trace("segs {}", seg);
   if (seg.size() == 2) {
     auto v0 = *it0, v1 = *it1;
-    spdlog::trace("v0 {} v1 {}", v0, v1);
+    spdlog::trace("Single edge in the segment {}-{}", v0, v1);
     auto &nb = VF[v0];
     auto &nbi = VFi[v0];
     for (auto i = 0; i < nb.size(); i++) {
       auto f0 = nb[i];
       auto e0 = nbi[i];
-      if (F(f0, e0) != v0)
-        throw std::runtime_error("v0 wrong");
-      if (F(f0, (e0 + 2) % 3) == v1) {
+      assert(F(f0, e0) == v0 && "VFi should satisfy.");
+      if (F(f0, (e0 + 2) % 3) == v1) { // f0 = (v1,v0,vx), on the right of (v0,v1)
         return {f0};
       }
     }
-    throw std::runtime_error("Not found the triangle opposite to feature.");
+    assert(false && "Not found the triangle opposite to feature.");
     return {};
   }
 
@@ -568,7 +574,7 @@ auto find_rejection_trackee = [](const RowMati &F,
 // this is the distortion function used by snapper.
 bool feature_handled_distort_check(const PrismCage &pc,
                                    const prism::local::RemeshOptions &option,
-                                   const std::vector<Vec3i> &moved_tris,
+                                   const std::vector<Vec3i> &moved_pris,
                                    const std::vector<int> &old_fid,
                                    std::vector<std::set<int>> &sub_trackee) {
   auto &base = pc.base, &top = pc.top, &mid = pc.mid;
@@ -579,10 +585,10 @@ bool feature_handled_distort_check(const PrismCage &pc,
   std::set<int> combined_tracks;
   for (auto f : old_fid)
     set_add_to(pc.track_ref[f], combined_tracks);
-  sub_trackee.resize(moved_tris.size());
+  sub_trackee.resize(moved_pris.size());
 
-  for (auto i = 0; i < moved_tris.size(); i++) {
-    auto &f = moved_tris[i];
+  for (auto i = 0; i < moved_pris.size(); i++) {
+    auto &f = moved_pris[i];
     auto remain_track = combined_tracks;
     for (auto j = 0; j < 3; j++) {
       auto v0 = f[j], v1 = f[(j + 1) % 3];
@@ -599,7 +605,9 @@ bool feature_handled_distort_check(const PrismCage &pc,
       }
       auto &seg = it0->second.second;
       auto reject = std::set<int>();
-      if (seg.empty()) throw std::runtime_error("empty segs. This is ok, but next line should change.");
+      if (seg.empty())
+        throw std::runtime_error(
+            "empty segs. This is ok, but next line should change.");
       if (left)
         reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, seg,
                                         seg.begin(), seg.end());
@@ -664,13 +672,14 @@ void prism::local_validity::post_operation(
   }
 }
 
-int prism::local_validity::attempt_zig_remesh(
+prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
     const PrismCage &pc, const std::vector<std::set<int>> &map_track,
     const prism::local::RemeshOptions &option,
     // specified infos below
     double old_quality, const std::vector<int> &old_fid,
-    const std::vector<Vec3i> &moved_tris,
+    const std::vector<Vec3i> &moved_pris,
     std::vector<std::set<int>> &sub_trackee, std::vector<RowMatd> &local_cp) {
+  using Err = PolyOpError;
   constexpr auto lets_comb_the_pillars = true;
   auto &base = pc.base, &top = pc.top, &mid = pc.mid;
   auto &F = pc.F;
@@ -687,57 +696,51 @@ int prism::local_validity::attempt_zig_remesh(
   for (auto f : old_fid)
     old_tris.push_back(F[f]);
 
-  spdlog::trace("old_tris {}", old_tris);
+  spdlog::trace("old_pris {}", old_tris);
   auto quality_before = (old_quality >= 0)
                             ? old_quality
                             : max_quality_on_tris(base, mid, top, old_tris);
-  auto quality_after = max_quality_on_tris(base, mid, top, moved_tris);
+  auto quality_after = max_quality_on_tris(base, mid, top, moved_pris);
   spdlog::trace("Quality compare {} -> {}", quality_before, quality_after);
   if (std::isnan(quality_after) || !std::isfinite(quality_after))
-    return 4;
+    return Err::quality;
   if ((quality_after > option.relax_quality_threshold) &&
       quality_after > quality_before) // if the quality is too large, not allow
                                       // it to increase.
-    return 4;
+    return Err::quality;
   //  volume check
-  if (!volume_check(base, mid, top, moved_tris, num_freeze)) {
-    return 1;
+  if (!volume_check(base, mid, top, moved_pris, num_freeze)) {
+    return Err::kVolume;
   }
   auto ic =
-      dynamic_intersect_check(pc.base, pc.F, old_fid, moved_tris,
+      dynamic_intersect_check(pc.base, pc.F, old_fid, moved_pris,
                               *pc.base_grid) &&
-      dynamic_intersect_check(pc.top, pc.F, old_fid, moved_tris, *pc.top_grid);
+      dynamic_intersect_check(pc.top, pc.F, old_fid, moved_pris, *pc.top_grid);
   if (!ic)
-    return 2;
+    return Err::kIntersect;
 
   std::set<int> combined_tracks;
   for (auto f : old_fid)
     set_add_to(pc.track_ref[f], combined_tracks);
   sub_trackee.clear();
-  sub_trackee.resize(moved_tris.size());
+  sub_trackee.resize(moved_pris.size());
 
-  for (auto i = 0; i < moved_tris.size(); i++) {
-    auto &f = moved_tris[i];
+  for (auto i = 0; i < moved_pris.size(); i++) {
+    auto &f = moved_pris[i];
 
     auto [oppo_vid, rej_id, segs] =
         prism::local_validity::identify_zig(pc.meta_edges, f);
     if (rej_id == -10)
-      return 9;
+      return Err::twofeature;
     if (rej_id >= 0) {
+      // rej_id = 2*chain_id +0/1
       auto remain_track = std::set<int>();
-      auto reject = std::set<int>();
-      auto left = rej_id % 2 == 0;
-      if (left)
-        reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
+      // there is no left/right here, since identify_zig already handled it.
+      auto reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
                                         segs.begin(), segs.end());
-      else
-        reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
-                                        segs.rbegin(), segs.rend());
 
-      set_minus(combined_tracks, reject,
-                remain_track);
-
-      spdlog::trace("rej_id {}", rej_id); // 2*cid +0/1
+      set_minus(combined_tracks, reject, remain_track);
+      spdlog::trace("rej_id {}: combined {} - reject {}", rej_id, combined_tracks, reject);
       spdlog::trace("oppo {} segs {}", oppo_vid, segs.size());
       auto [v0, v1, v2] =
           std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
@@ -750,7 +753,7 @@ int prism::local_validity::attempt_zig_remesh(
 
       if (!volume_check(local_base, local_mid, local_top, zig_tris,
                         local_freeze)) {
-        return 6;
+        return Err::sub_volume;
       }
 
       // the distort check is not well bundled here.
@@ -769,34 +772,42 @@ int prism::local_validity::attempt_zig_remesh(
         return true;
       };
       if (!intersect_free_check())
-        return 7;
+        return Err::sub_intersect;
       auto dc = distort_check(local_base, local_mid, local_top, zig_tris,
                               remain_track, pc.ref.V, pc.ref.F,
                               option.distortion_bound, local_freeze, false);
       if (!dc)
-        return 8;
+        return Err::distort;
       for (auto &v : dc.value())
         set_add_to(v, sub_trackee[i]);
-    } else {
+    } else { // regular edge, without poly.
       auto dc =
           distort_check(pc.base, pc.mid, pc.top, {f}, combined_tracks, pc.ref.V,
                         pc.ref.F, option.distortion_bound, num_freeze, true);
       if (!dc)
-        return 3;
+        return Err::distort;
       sub_trackee[i] = dc.value()[0];
     }
   }
+
+  std::set<int> total_sub_trackee;
+  for (auto &s : sub_trackee)
+    set_add_to(s, total_sub_trackee);
+  spdlog::trace("total distributed {} == prev {}", total_sub_trackee.size(),
+                combined_tracks.size());
+  spdlog::trace("total {}, from {}", total_sub_trackee, combined_tracks);
+  assert(total_sub_trackee.size() == combined_tracks.size());
   if (option.curve_checker.first.has_value() &&
       !(std::any_cast<std::function<bool(
             const PrismCage &, const std::vector<int> &,
             const std::vector<Vec3i> &, std::vector<RowMatd> &)>>(
-          option.curve_checker.first))(pc, old_fid, moved_tris, local_cp)) {
-    return 5;
+          option.curve_checker.first))(pc, old_fid, moved_pris, local_cp)) {
+    return Err::curve;
   }
 
   if (lets_comb_the_pillars) {
     // throw std::runtime_error("post assignment since the result of combing has
     // passed.");
   }
-  return 0;
+  return Err::kSuccess;
 }

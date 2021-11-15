@@ -46,7 +46,7 @@ namespace prism::local_validity {
 //     local control points to be assigned later
 // Return:
 //    flag == 0 is success.
-int attempt_feature_remesh(const PrismCage &pc,
+PolyOpError attempt_feature_remesh(const PrismCage &pc,
                            const std::vector<std::set<int>> &map_track,
                            const prism::local::RemeshOptions &option,
                            // specified infos below
@@ -55,6 +55,7 @@ int attempt_feature_remesh(const PrismCage &pc,
                            const std::vector<Vec3i> &moved_tris,
                            std::vector<std::set<int>> &sub_trackee,
                            std::vector<RowMatd> &local_cp) {
+  using Err = PolyOpError;
   auto &base = pc.base, &top = pc.top, &mid = pc.mid;
   auto &F = pc.F;
   auto num_freeze = pc.ref.aabb->num_freeze;
@@ -69,37 +70,37 @@ int attempt_feature_remesh(const PrismCage &pc,
   // auto quality_before = max_quality_on_tris(base, mid, top, old_tris);
   auto quality_after = max_quality_on_tris(base, mid, top, moved_tris);
   spdlog::trace("Quality compare {} -> {}", quality_before, quality_after);
-  if (std::isnan(quality_after) || !std::isfinite(quality_after)) return 4;
+  if (std::isnan(quality_after) || !std::isfinite(quality_after)) return Err::quality;
   if ((quality_after > option.relax_quality_threshold) &&
       quality_after > quality_before)  // if the quality is too large, not allow
                                        // it to increase.
-    return 4;
+    return Err::quality;
   //  volume check
   if (!volume_check(base, mid, top, moved_tris, num_freeze)) {
-    return 1;
+    return Err::kVolume;
   }
 
   auto ic =
       dynamic_intersect_check(pc.base, pc.F, old_fid, moved_tris,
                               *pc.base_grid) &&
       dynamic_intersect_check(pc.top, pc.F, old_fid, moved_tris, *pc.top_grid);
-  if (!ic) return 2;
+  if (!ic) return Err::kIntersect;
 
   spdlog::trace("old tris {}", old_tris);
   spdlog::trace("move tris {}", moved_tris);
   sub_trackee.clear();
   if (!feature_handled_distort_check(pc, option, moved_tris, old_fid,
                                      sub_trackee))
-    return 3;
+    return Err::distort;
   if (option.curve_checker.first.has_value() &&
       !(std::any_cast<std::function<bool(
             const PrismCage &, const std::vector<int> &,
             const std::vector<Vec3i> &, std::vector<RowMatd> &)>>(
           option.curve_checker.first))(pc, old_fid, moved_tris, local_cp)) {
-    return 5;
+    return Err::curve;
   }
 
-  return 0;
+  return Err::kSuccess;
 }
 
 }  // namespace prism::local_validity
@@ -858,13 +859,13 @@ int smooth_tracked_reference(PrismCage &pc,
     spdlog::debug("happening {} ", sh_id);
     prism::local_validity::post_operation(pc, option, old_fids, old_fids,
                                           new_tracks, local_cp);
-    return 0;
+    return prism::local_validity::kSuccess;
   };
   auto [FF, FFi] = prism::local::triangle_triangle_adjacency(pc.F);
   auto cnt = 0;
   for (auto sh_id = 0; sh_id < pc.F.size(); sh_id++) {
     auto flag= single(FF, sh_id);
-    if (flag == 0) cnt ++;
+    if (flag == prism::local_validity::kSuccess) cnt ++;
   }
   spdlog::info("Reference Mesh Smoother {}", cnt);
   return cnt;

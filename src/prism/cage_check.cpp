@@ -58,11 +58,7 @@ bool prism::cage_check::verify_edge_based_track(
       return false;
     }
     if (rej_id >= 0) {
-      throw std::runtime_error("polyshell crt not modified");
-      auto &crt = option.chain_reject_trackee[rej_id];
-      if (crt.find(i) != crt.end())
-        return false;  // rare occurence, degree 1 feature node with four
-                       // adjacent triangles to start with.
+      // throw std::runtime_error("polyshell crt not modified");
       auto [v0, v1, v2] =
           std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
 
@@ -88,7 +84,6 @@ bool prism::cage_check::verify_edge_based_track(
       return (tracks && tracks.value()[0].size() > 0);
     }
   };
-  spdlog::set_level(spdlog::level::info);
   // check surjective.
   {
     Eigen::VectorXi flags_per_face(pc.ref.F.rows());
@@ -98,7 +93,7 @@ bool prism::cage_check::verify_edge_based_track(
     }
     for (int k = 0; k < flags_per_face.size(); k++) {
       if (flags_per_face[k] > 0) {
-        spdlog::error("Not surjective {}", k);
+        spdlog::error("Not surjective tri {}", k);
         return false;
       }
     }

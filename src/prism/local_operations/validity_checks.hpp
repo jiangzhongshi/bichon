@@ -6,6 +6,7 @@
 #include "../common.hpp"
 #include "../geogram/AABB.hpp"
 #include "local_mesh_edit.hpp"
+#include "prism/energy/prism_quality.hpp"
 namespace prism {
 struct HashGrid;
 }
@@ -14,25 +15,38 @@ namespace prism::local {
 struct RemeshOptions;
 }
 
-
 namespace prism::local_validity {
+enum PolyOpError {
+  kSuccess = 0,
+  link,
+  quality,
+  kVolume,
+  kIntersect,
+  twofeature,
+  sub_volume,
+  sub_intersect,
+  distort,
+  curve,
+  feature,
+  others,
+  kMax
+};
 // old quality is used within smooth, to record before entering the attempter.
-int attempt_zig_remesh(const PrismCage &pc,
-                       const std::vector<std::set<int>> &map_track,
-                       const prism::local::RemeshOptions &option,
-                       // specified infos below
-                       double old_quality,
-                       const std::vector<int> &old_fid,
-                       const std::vector<Vec3i> &moved_tris,
-                       std::vector<std::set<int>> &sub_trackee,
-                       std::vector<RowMatd> &local_cp) ;
+PolyOpError attempt_zig_remesh(const PrismCage &pc,
+                               const std::vector<std::set<int>> &map_track,
+                               const prism::local::RemeshOptions &option,
+                               // specified infos below
+                               double old_quality,
+                               const std::vector<int> &old_fid,
+                               const std::vector<Vec3i> &moved_tris,
+                               std::vector<std::set<int>> &sub_trackee,
+                               std::vector<RowMatd> &local_cp);
 
-int attempt_feature_remesh(const PrismCage &pc,
+PolyOpError attempt_feature_remesh(const PrismCage &pc,
                            const std::vector<std::set<int>> &map_track,
                            const prism::local::RemeshOptions &option,
                            // specified infos below
-                           double old_quality,
-                           const std::vector<int> &old_fid,
+                           double old_quality, const std::vector<int> &old_fid,
                            const std::vector<Vec3i> &moved_tris,
                            std::vector<std::set<int>> &sub_trackee,
                            std::vector<RowMatd> &local_cp);
@@ -60,8 +74,8 @@ bool prism_positivity_with_numerical(const std::array<Vec3d, 6> &verts,
 bool dynamic_intersect_check(
     const std::vector<Vec3d> &base, const std::vector<Vec3i> &F,
     const std::vector<int>
-        &vec_removed,  // proposed removal face_id to be ignored in the test.
-    const std::vector<Vec3i> &tris,  // proposed addition triangles
+        &vec_removed, // proposed removal face_id to be ignored in the test.
+    const std::vector<Vec3i> &tris, // proposed addition triangles
     const prism::HashGrid &grid);
 
 int attempt_local_edit(
@@ -126,13 +140,13 @@ bool intersect_check(const std::vector<Vec3d> &base,
 // from vector<new Tri>, need to call placement(),
 // and update position, compute distortion for each Tri
 
-std::optional<std::vector<std::set<int>>> distort_check(
-    const std::vector<Vec3d> &base,
-    const std::vector<Vec3d> &mid,  // placed new verts
-    const std::vector<Vec3d> &top, const std::vector<Vec3i> &tris,
-    const std::set<int> &combined_trackee,  // indices to ref.F tracked
-    const RowMatd &refV, const RowMati &refF, double distortion_bound,
-    int num_freeze, bool bundled_intersection = false);
+std::optional<std::vector<std::set<int>>>
+distort_check(const std::vector<Vec3d> &base,
+              const std::vector<Vec3d> &mid, // placed new verts
+              const std::vector<Vec3d> &top, const std::vector<Vec3i> &tris,
+              const std::set<int> &combined_trackee, // indices to ref.F tracked
+              const RowMatd &refV, const RowMati &refF, double distortion_bound,
+              int num_freeze, bool bundled_intersection = false);
 
 bool feature_handled_distort_check(const PrismCage &pc,
                                    const prism::local::RemeshOptions &option,
@@ -144,6 +158,6 @@ void post_operation(PrismCage &pc, const prism::local::RemeshOptions &option,
                     const std::vector<int> &new_fids,
                     const std::vector<std::set<int>> &new_tracks,
                     std::vector<RowMatd> &local_cp);
-}  // namespace prism::local_validity
+} // namespace prism::local_validity
 
 #endif

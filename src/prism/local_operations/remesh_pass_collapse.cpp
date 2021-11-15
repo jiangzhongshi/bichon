@@ -176,7 +176,8 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
   }
   for (int i = 0; i < pc.ref.aabb->num_freeze; i++) skip_flag[i] = true;
 
-  std::vector<int> rejections_steps(8, 0);
+  using Err = prism::local_validity::PolyOpError;
+  std::vector<int> rejections_steps(Err::kMax, 0);
   // pop
   int global_tick = 0;
   RowMati timestamp = RowMati::Zero(F.size(), 3);
@@ -245,27 +246,28 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
 
     auto new_tracks = std::vector<std::set<int>>();
     std::vector<RowMatd> local_cp;
+    
     auto flag = [&pc, &option, &skip_flag, f0 = f, &f1, &u0, &u1, &attempt_operation,
                  &new_tracks, &local_cp,
-                 &old_fids = old_fid, &moved_tris = moved_tris](int repeat_num) -> int {
+                 &old_fids = old_fid, &moved_tris = moved_tris](int repeat_num) -> Err {
       if (skip_flag[u0])  // skip if singularity or feature
-        return 4;
+        return Err::feature;
       // if (skip_flag[u1])
         // repeat_num = 1;  // no shrinking on feature for now.
       for (auto rp = 0; rp < repeat_num; rp++) {
         auto flag = attempt_operation(
             pc, pc.track_ref, option, -1, old_fids, moved_tris, new_tracks, local_cp);
 
-        if (flag != 1)  // if fail not due to volume, accept the conclusion
+        if (flag != Err::kVolume)  // if fail not due to volume, accept the conclusion
           return flag;
         pc.base[u1] = (pc.base[u1] + pc.mid[u1]) / 2;
         pc.top[u1] = (pc.top[u1] + pc.mid[u1]) / 2;
       }
-      return 1;
+      return Err::kVolume;
     }(5);
     spdlog::trace("Attempt Collapse, {} {} pass: {}", f, e, flag);
 
-    if (flag != 0) {
+    if (flag != Err::kSuccess) {
       rejections_steps[flag]++;
       std::tie(pc.base[u1], pc.top[u1]) = recover_coordinates;
       continue;  // still failing
@@ -326,7 +328,7 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
     }
   }
   spdlog::info("Pass Collapse total {}. lk{}, v{} i{} d{} q{} c{}", global_tick,
-               rejections_steps[0], rejections_steps[1], rejections_steps[2],
+               rejections_steps[Err::kSuccess], rejections_steps[1], rejections_steps[2],
                rejections_steps[3], rejections_steps[4], rejections_steps[5]);
   Eigen::VectorXi vid_ind, vid_map;
   pc.cleanup_empty_faces(vid_map, vid_ind);

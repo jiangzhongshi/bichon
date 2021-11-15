@@ -76,7 +76,7 @@ endfunction()
 function(prism_download_geogram)
     prism_download_project(geogram
         GIT_REPOSITORY https://github.com/alicevision/geogram.git
-        GIT_TAG        v1.6.8
+        GIT_TAG        v1.7.7
     )
 endfunction()
 
