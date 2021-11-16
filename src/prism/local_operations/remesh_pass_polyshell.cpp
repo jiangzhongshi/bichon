@@ -56,33 +56,20 @@ constexpr auto split_segs_in_the_middle = [](const Vec3d &p0, const Vec3d &p1,
                                              const RowMatd &inpV,
                                              const std::vector<int> &segs) {
   // perform zig append. minor duplication wrt zig_constructor
-  std::vector<Vec3d> seg_pos;
-  std::vector<int> segs_virtual = segs;
-  if (segs.empty()) {
-    seg_pos = {p0, p1};
-    segs_virtual = {-1, -1};
-  } else {
-    if (p0 != inpV.row(segs.front())) {
-      segs_virtual.insert(segs_virtual.begin(), -1);
-      seg_pos.push_back(p0);
-    }
-    for (auto s : segs)
-      seg_pos.push_back(inpV.row(s));
-    if (p1 != inpV.row(segs.back())) {
-      seg_pos.push_back(p1);
-      segs_virtual.push_back(-1);
-    }
-  }
+  assert(segs.size() >= 2 && "Switching to the end-inclusive segs now");
+  std::vector<Vec3d> seg_pos(segs.size());
+  seg_pos.front() = p0;
+  seg_pos.back() = p1;
+  for (auto i = 1; i < segs.size() - 1; i++)
+    seg_pos[i] = inpV.row(segs[i]);
+
 
   auto [slice_id, offset] = select_middle(seg_pos);
   spdlog::trace("sliceid {} seglen {}", slice_id, seg_pos.size());
 
   assert(slice_id < seg_pos.size());
-  // spdlog::warn("violation!");
-  // spdlog::dump_backtrace();
-  // throw std::runtime_error("Slice should not exceed segs.");
   auto mid_pos = Vec3d();
-  if (offset == 0.) {
+  if (offset == 0.) { // exactly at one of the vertices.
     mid_pos = seg_pos[slice_id]; // bitwise
   } else {
     mid_pos = seg_pos[slice_id + 1] * offset + seg_pos[slice_id] * (1 - offset);
@@ -90,17 +77,14 @@ constexpr auto split_segs_in_the_middle = [](const Vec3d &p0, const Vec3d &p1,
 
   auto seg0 = std::vector<int>();
   auto seg1 = std::vector<int>();
-  for (auto i = 0; i < slice_id + 1; i++)
-    if (segs_virtual[i] != -1)
-      seg0.push_back(segs_virtual[i]);
-  if (offset == 0.) {
-    assert(seg0.size() > 0);
-    seg1.push_back(seg0.back());
-  }
-  for (auto i = slice_id + 1; i < seg_pos.size(); i++)
-    if (segs_virtual[i] != -1)
-      seg1.push_back(segs_virtual[i]);
 
+  seg0 = std::vector<int>(segs.begin(), segs.begin() + slice_id + 2);
+  seg1 = std::vector<int>(segs.begin() + slice_id, segs.end());
+  if (offset == 0.) {
+    seg0.pop_back();
+    assert(seg0.back() == seg1.front());
+  }
+  spdlog::trace("segs {} -> {} + {}", segs, seg0, seg1);
   return std::tuple(std::move(seg0), std::move(seg1), mid_pos);
 };
 
@@ -197,11 +181,11 @@ int prism::local::zig_collapse_pass(PrismCage &pc, RemeshOptions &option) {
 
     // concatentate seg(u2,u0) and seg(u1,u0)
     auto newseg = seg0->second.second;
-    if (!newseg.empty() && !seg1->second.second.empty()) {
-      if (newseg.back() == seg1->second.second.front()) {
-        newseg.pop_back();
-      }
+    if (newseg.back() != seg1->second.second.front()) { // exact vertex
+      assert(seg1->second.second[1] == newseg.back());
+      newseg.pop_back();
     }
+    newseg.pop_back();
     newseg.insert(newseg.end(), seg1->second.second.begin(),
                   seg1->second.second.end());
 
@@ -316,7 +300,7 @@ int prism::local::zig_slide_pass(PrismCage &pc, RemeshOptions &option) {
   for (auto vid : verts_on_feat) {
     auto nb = VF[vid], nbi = VFi[vid];
     // only do sth when two feature
-    std::vector<decltype(meta_edges.begin())> nb_feat;
+    std::vector<PrismCage::meta_type_t::iterator> nb_feat;
     for (auto i = 0; i < nb.size(); i++) {
       auto v0 = vid, v1 = F[nb[i]][(nbi[i] + 1) % 3],
            v2 = F[nb[i]][(nbi[i] + 2) % 3];
@@ -340,19 +324,23 @@ int prism::local::zig_slide_pass(PrismCage &pc, RemeshOptions &option) {
     auto v1 = it1->first.second, v2 = it0->first.first;
     spdlog::trace("u1 {} <- u0 {} <- u2 {}", v1, vid, v2);
 
-    auto newseg = it0->second.second;
-    if (!newseg.empty() && !it1->second.second.empty())
-      if (newseg.back() == it1->second.second.front())
-        newseg.pop_back();
+    auto newseg = it0->second.second; // seg combines.
+    if (newseg.back() != it1->second.second.front()) {
+      assert(newseg.back() == it1->second.second[1]);
+      newseg.pop_back();
+    }
+    newseg.pop_back();
     newseg.insert(newseg.end(), it1->second.second.begin(),
                   it1->second.second.end());
-    if (newseg.size() < 4)
-      continue; // no need to slide
+    // if (newseg.size() <= 3)
+      // continue; // no need to slide
 
     auto [seg0, seg1, mid_pos] =
         split_segs_in_the_middle(V[v2], V[v1], inpV, newseg);
     // if (offset == 0. && slice_id + 1 == it0->second.second.size())
     // continue;  // no shift
+    spdlog::trace("seg size {} + {} from {}", seg0.size(), seg1.size(), newseg.size());
+    assert(seg0.size() >= 2 && seg1.size() >= 2);
 
     auto recover_coordinates =
         std::tuple(pc.base[vid], pc.mid[vid], pc.top[vid], it0->second.second,

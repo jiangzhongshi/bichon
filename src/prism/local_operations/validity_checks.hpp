@@ -18,17 +18,17 @@ struct RemeshOptions;
 namespace prism::local_validity {
 enum PolyOpError {
   kSuccess = 0,
-  link,
-  quality,
+  kLink,
+  kQuality,
   kVolume,
   kIntersect,
-  twofeature,
-  sub_volume,
-  sub_intersect,
-  distort,
-  curve,
-  feature,
-  others,
+  kTwoFeature,
+  kSubVolume,
+  kSubIntersect,
+  kDistort,
+  kCurve,
+  kFeature,
+  kOthers,
   kMax
 };
 // old quality is used within smooth, to record before entering the attempter.

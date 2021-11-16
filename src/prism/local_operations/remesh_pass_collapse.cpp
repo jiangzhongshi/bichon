@@ -200,7 +200,7 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
     // collapse and misc checks.
     std::vector<std::pair<int, int>> n0, n1;
     if (!collapse::satisfy_link_condition(F, FF, FFi, f, e, n0, n1)) {
-      rejections_steps[0]++;
+      rejections_steps[Err::kLink]++;
       continue;
     }
     spdlog::trace("LinkCondition pass, attempt {} {}", f, e);
@@ -251,7 +251,7 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
                  &new_tracks, &local_cp,
                  &old_fids = old_fid, &moved_tris = moved_tris](int repeat_num) -> Err {
       if (skip_flag[u0])  // skip if singularity or feature
-        return Err::feature;
+        return Err::kFeature;
       // if (skip_flag[u1])
         // repeat_num = 1;  // no shrinking on feature for now.
       for (auto rp = 0; rp < repeat_num; rp++) {
@@ -328,8 +328,8 @@ int prism::local::wildcollapse_pass(PrismCage &pc, RemeshOptions &option) {
     }
   }
   spdlog::info("Pass Collapse total {}. lk{}, v{} i{} d{} q{} c{}", global_tick,
-               rejections_steps[Err::kSuccess], rejections_steps[1], rejections_steps[2],
-               rejections_steps[3], rejections_steps[4], rejections_steps[5]);
+               rejections_steps[Err::kLink], rejections_steps[Err::kVolume],
+               rejections_steps[Err::kIntersect], rejections_steps[Err::kDistort], rejections_steps[Err::kQuality], rejections_steps[Err::kCurve]);
   Eigen::VectorXi vid_ind, vid_map;
   pc.cleanup_empty_faces(vid_map, vid_ind);
   for (int i = 0; i < vid_ind.size(); i++) {

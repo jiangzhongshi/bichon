@@ -39,7 +39,7 @@ auto post_collapse = [](auto &complete_cp) {
 
 auto reverse_feature_order = [](PrismCage &pc,
                                 prism::local::RemeshOptions &option) {
-  decltype(pc.meta_edges) meta;
+  PrismCage::meta_type_t meta;
   if (pc.meta_edges.empty())
     return;
   for (auto [a, b] : pc.meta_edges) {
@@ -611,8 +611,6 @@ void feature_and_curve(std::string filename, std::string fgname,
   if (control_cfg["only_initial"])
     return;
 
-  auto chains = prism::recover_chains_from_meta_edges(pc->meta_edges);
-  spdlog::info("chains size {}", chains.size());
   if (control_cfg["enable_curve"] && control_cfg["reset_cp"] &&
       complete_cp.size() != pc->F.size()) {
     spdlog::info("order {} Reset CP", order);

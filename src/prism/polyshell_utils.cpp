@@ -9,8 +9,7 @@
 #include <highfive/H5Easy.hpp>
 
 auto prism::local_validity::identify_zig(
-    const std::map<std::pair<int, int>, std::pair<int, std::vector<int>>>
-        &meta_edges,
+    const PrismCage::meta_type_t &meta_edges,
     const Vec3i &f) -> std::tuple<int, int, std::vector<int>> {
   auto oppo_vid = -1;
   auto cid = -1;
@@ -35,6 +34,7 @@ auto prism::local_validity::identify_zig(
     }
     oppo_vid = (j + 2) % 3;
   }
+  assert(cid == -1 || segs.size() >= 2);
   return std::tuple(oppo_vid, cid, segs);
 };
 
@@ -47,35 +47,23 @@ auto prism::local_validity::zig_constructor(const PrismCage &pc, int v0, int v1,
   auto &base = pc.base, &top = pc.top, &mid = pc.mid;
   auto &refV = pc.ref.V;
   spdlog::trace("v0 v1 v2 {},{},{}", v0, v1, v2);
-  std::vector<Vec3d> local_mid(0); //(segs.size() + 1);
-  local_mid.reserve(segs.size() + 3);
+  assert(segs.size() >= 2);
+  std::vector<Vec3d> local_mid(segs.size());
   auto flip_order = v1 > v2;
   auto start = mid[v1];
   auto end = mid[v2];
-  auto padded_segs = segs;
-  if (segs.empty()) {
-    local_mid.push_back(start);
-    local_mid.push_back(end);
-    padded_segs = {-1, -1};
-  } else {
-    if (refV.row(segs.front()) != start) { // add to front.
-      local_mid.push_back(start);
-      padded_segs.insert(padded_segs.begin(), -1);
-    }
-    for (auto s : segs)
-      local_mid.push_back(refV.row(s)); // 1,2,...,n
-    if (refV.row(segs.back()) != end) { // add to back
-      local_mid.push_back(end);
-      padded_segs.push_back(-1);
-    }
-  }
+
+  local_mid.front() = start;
+  local_mid.back() = end;
+  for (auto i = 1; i < segs.size() - 1; i++)
+    local_mid[i] = refV.row(segs[i]);
+
   if (flip_order) {
     std::reverse(local_mid.begin(), local_mid.end());
-    std::reverse(padded_segs.begin(), padded_segs.end());
     std::swap(v1, v2);
   }
 
-  assert(local_mid.size() >= segs.size());
+  assert(local_mid.size() == segs.size());
   std::vector<Vec3d> local_base(local_mid.size());
   std::vector<Vec3d> local_top(local_mid.size());
   assert(v1 < v2);
@@ -83,7 +71,7 @@ auto prism::local_validity::zig_constructor(const PrismCage &pc, int v0, int v1,
   local_base.back() = base[v2];
   local_top.front() = top[v1];
   local_top.back() = top[v2];
-  int n = local_mid.size();
+  auto n = segs.size();
   if (lets_comb_the_pillars) {
     auto cumlength = std::vector<double>(n, 0.);
     for (auto i = 1; i < n; i++) {
@@ -93,20 +81,19 @@ auto prism::local_validity::zig_constructor(const PrismCage &pc, int v0, int v1,
     // spdlog::info(" base[v1] {}, {}",  base[v1],  base[v2]);
     for (auto i = 1; i < n - 1; i++) {
       auto alpha = cumlength[i] / cumlength.back();
-      Vec3d offset_mid = mid[v1] * (1 - alpha) + mid[v2] * alpha - local_mid[i];
-      local_base[i] = base[v1] * (1 - alpha) + base[v2] * alpha - offset_mid;
-      local_top[i] = top[v1] * (1 - alpha) + top[v2] * alpha - offset_mid;
+      // Vec3d offset_mid = mid[v1] * (1 - alpha) + mid[v2] * alpha - local_mid[i];
+      local_base[i] = base[v1] * (1 - alpha) + base[v2] * alpha;// - offset_mid;
+      local_top[i] = top[v1] * (1 - alpha) + top[v2] * alpha;// - offset_mid;
     }
   } else {
+    assert(false && "only performing combing for now");
     for (auto i = 0; i < n; i++) {
-      if (padded_segs[i] == -1) continue;
-      local_base[i] = pc.zig_base.row(padded_segs[i]);
-      local_top[i] = pc.zig_top.row(padded_segs[i]);
     }
   }
 
+  assert (v1 < v2);
   auto v0i = 0;
-  if (v0 > v2) {
+  if (v0 > v2) { // v1 < v2 < v0
     assert(v0 > v1);
     local_mid.push_back(mid[v0]);
     local_base.push_back(base[v0]);
@@ -144,7 +131,6 @@ auto prism::local_validity::zig_constructor(const PrismCage &pc, int v0, int v1,
 
   spdlog::trace("zig {}\n flip {}\n lm {}\n segs {}", zig_tris,
                 flip_order, local_mid.size(), segs.size());
-  assert(local_mid.size() == padded_segs.size() + 1);
   assert(local_mid.size() == zig_tris.size() + 2);
   if (false)
   {

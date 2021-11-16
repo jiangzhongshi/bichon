@@ -518,7 +518,6 @@ distort_check(const std::vector<Vec3d> &base,
 }
 
 /// @brief find set of triangles to reject adjacent to the feature
-/// @note 
 template <typename T>
 auto find_rejection_trackee(const RowMati &F,
                             const std::vector<std::vector<int>> &VF,
@@ -703,11 +702,11 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
   auto quality_after = max_quality_on_tris(base, mid, top, moved_pris);
   spdlog::trace("Quality compare {} -> {}", quality_before, quality_after);
   if (std::isnan(quality_after) || !std::isfinite(quality_after))
-    return Err::quality;
+    return Err::kQuality;
   if ((quality_after > option.relax_quality_threshold) &&
       quality_after > quality_before) // if the quality is too large, not allow
                                       // it to increase.
-    return Err::quality;
+    return Err::kQuality;
   //  volume check
   if (!volume_check(base, mid, top, moved_pris, num_freeze)) {
     return Err::kVolume;
@@ -731,19 +730,19 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
     auto [oppo_vid, rej_id, segs] =
         prism::local_validity::identify_zig(pc.meta_edges, f);
     if (rej_id == -10)
-      return Err::twofeature;
+      return Err::kTwoFeature;
     if (rej_id >= 0) {
       // rej_id = 2*chain_id +0/1
       auto remain_track = std::set<int>();
+      spdlog::trace("oppo {} segs {}", oppo_vid, segs.size());
+      auto [v0, v1, v2] =
+          std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
       // there is no left/right here, since identify_zig already handled it.
-      auto reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs,
+      auto reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs, // TODO padding required here.
                                         segs.begin(), segs.end());
 
       set_minus(combined_tracks, reject, remain_track);
       spdlog::trace("rej_id {}: combined {} - reject {}", rej_id, combined_tracks, reject);
-      spdlog::trace("oppo {} segs {}", oppo_vid, segs.size());
-      auto [v0, v1, v2] =
-          std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
 
       auto [local_base, local_mid, local_top, zig_tris, _] =
           zig_constructor(pc, v0, v1, v2, segs, lets_comb_the_pillars);
@@ -753,7 +752,7 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
 
       if (!volume_check(local_base, local_mid, local_top, zig_tris,
                         local_freeze)) {
-        return Err::sub_volume;
+        return Err::kSubVolume;
       }
 
       // the distort check is not well bundled here.
@@ -772,12 +771,12 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
         return true;
       };
       if (!intersect_free_check())
-        return Err::sub_intersect;
+        return Err::kSubIntersect;
       auto dc = distort_check(local_base, local_mid, local_top, zig_tris,
                               remain_track, pc.ref.V, pc.ref.F,
                               option.distortion_bound, local_freeze, false);
       if (!dc)
-        return Err::distort;
+        return Err::kDistort;
       for (auto &v : dc.value())
         set_add_to(v, sub_trackee[i]);
     } else { // regular edge, without poly.
@@ -785,7 +784,7 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
           distort_check(pc.base, pc.mid, pc.top, {f}, combined_tracks, pc.ref.V,
                         pc.ref.F, option.distortion_bound, num_freeze, true);
       if (!dc)
-        return Err::distort;
+        return Err::kDistort;
       sub_trackee[i] = dc.value()[0];
     }
   }
@@ -802,7 +801,7 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
             const PrismCage &, const std::vector<int> &,
             const std::vector<Vec3i> &, std::vector<RowMatd> &)>>(
           option.curve_checker.first))(pc, old_fid, moved_pris, local_cp)) {
-    return Err::curve;
+    return Err::kCurve;
   }
 
   if (lets_comb_the_pillars) {

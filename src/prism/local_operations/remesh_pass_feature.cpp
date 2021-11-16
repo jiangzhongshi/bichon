@@ -70,11 +70,11 @@ PolyOpError attempt_feature_remesh(const PrismCage &pc,
   // auto quality_before = max_quality_on_tris(base, mid, top, old_tris);
   auto quality_after = max_quality_on_tris(base, mid, top, moved_tris);
   spdlog::trace("Quality compare {} -> {}", quality_before, quality_after);
-  if (std::isnan(quality_after) || !std::isfinite(quality_after)) return Err::quality;
+  if (std::isnan(quality_after) || !std::isfinite(quality_after)) return Err::kQuality;
   if ((quality_after > option.relax_quality_threshold) &&
       quality_after > quality_before)  // if the quality is too large, not allow
                                        // it to increase.
-    return Err::quality;
+    return Err::kQuality;
   //  volume check
   if (!volume_check(base, mid, top, moved_tris, num_freeze)) {
     return Err::kVolume;
@@ -91,13 +91,13 @@ PolyOpError attempt_feature_remesh(const PrismCage &pc,
   sub_trackee.clear();
   if (!feature_handled_distort_check(pc, option, moved_tris, old_fid,
                                      sub_trackee))
-    return Err::distort;
+    return Err::kDistort;
   if (option.curve_checker.first.has_value() &&
       !(std::any_cast<std::function<bool(
             const PrismCage &, const std::vector<int> &,
             const std::vector<Vec3i> &, std::vector<RowMatd> &)>>(
           option.curve_checker.first))(pc, old_fid, moved_tris, local_cp)) {
-    return Err::curve;
+    return Err::kCurve;
   }
 
   return Err::kSuccess;
