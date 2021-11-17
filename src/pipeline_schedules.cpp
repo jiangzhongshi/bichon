@@ -290,7 +290,7 @@ void tetshell_fill(const RowMatd &ext_base, const RowMatd &shell_base,
 
 bool checker_inversion(const PrismCage &pc,
                        const std::vector<RowMatd> &complete_cp) {
-  for (auto i = 0; i < pc.F.size(); i++) {
+  for (auto i = 0; i < complete_cp.size(); i++) {
     auto check = prism::curve::elevated_positive(pc.base, pc.top, {pc.F[i]},
                                                  true, {complete_cp[i]});
     if (!check) {

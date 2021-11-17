@@ -44,11 +44,13 @@ constexpr auto select_middle = [](auto &segs) {
   auto it0 = std::prev(it);
   auto id = std::distance(cumlength.begin(), it0);
   auto offset = (half_len - *it0) / (*it - *it0);
-  if (offset < 1e-3) offset = 0.;
-  if (offset > 1 - 1e-3) {
+  auto eps = 0.5;
+  if (offset < 0.5) offset = 0.;
+  if (offset >= 0.5) {
     id++;
     offset = 0.;
   }
+  assert(offset == 0);
   return std::tuple(id, offset);
 };
 
@@ -65,6 +67,7 @@ constexpr auto split_segs_in_the_middle = [](const Vec3d &p0, const Vec3d &p1,
 
 
   auto [slice_id, offset] = select_middle(seg_pos);
+  assert (offset ==0 && "TODO: postpone handling of sliders: the opposite ref triangle need to be reject.");
   spdlog::trace("sliceid {} seglen {}", slice_id, seg_pos.size());
 
   assert(slice_id < seg_pos.size());

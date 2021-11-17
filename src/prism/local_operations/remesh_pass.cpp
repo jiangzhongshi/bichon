@@ -155,7 +155,7 @@ void wildflip_pass(PrismCage &pc, const RemeshOptions &option) {
 
   int global_tick = 0;
   RowMati timestamp = RowMati::Zero(F.size(), 3);
-  std::vector<int> rejection_steps(8, 0);
+  std::vector<int> rejection_steps(prism::local_validity::kMax, 0);
   // pop
   while (!queue.empty()) {
     auto [l, f, e, u0, u1, tick] = queue.top();
