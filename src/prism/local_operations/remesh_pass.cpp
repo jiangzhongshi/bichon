@@ -291,7 +291,7 @@ int wildsplit_pass(PrismCage &pc, RemeshOptions &option) {
     }
   }
 
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   int global_tick = 0;
   // pop
   while (!queue.empty()) {

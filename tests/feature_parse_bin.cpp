@@ -53,22 +53,6 @@ auto collision_checker = [](auto &pc) {
   return true;
 };
 
-auto reverse_feature_order = [](PrismCage &pc,
-                                prism::local::RemeshOptions &option) {
-  decltype(pc.meta_edges) meta;
-  for (auto [a, b] : pc.meta_edges) {
-    auto a1 = std::pair{a.second, a.first};
-    auto b1 = b;
-    b1.second = std::vector<int>(b.second.rbegin(), b.second.rend());
-    meta.emplace(a1, b1);
-  }
-  pc.meta_edges = std::move(meta);
-  auto &crt = option.chain_reject_trackee;
-  for (int i = 0; i < crt.size(); i += 2) {
-    std::swap(crt[i], crt[i + 1]);
-  }
-};
-
 #include "prism/energy/prism_quality.hpp"
 double total_energy(const std::vector<Vec3d> &V, const std::vector<Vec3i> &F) {
   std::set<int> low_quality_vertices;

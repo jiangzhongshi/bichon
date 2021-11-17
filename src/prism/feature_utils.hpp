@@ -7,7 +7,6 @@
 
 #include "common.hpp"
 namespace prism {
-
 constexpr auto vv2fe = [](auto &v0, auto &v1, const auto &F, const auto &VF) {
   std::vector<int> common;
   std::set_intersection(VF[v0].begin(), VF[v0].end(), VF[v1].begin(),
@@ -48,11 +47,9 @@ void feature_chain_region_segments(
     std::vector<std::set<int>> &region_around_chain);
 
 std::vector<std::list<int>> glue_meta_together(
-    const std::map<std::pair<int, int>, std::pair<int, std::vector<int>>>
-        &meta);
+    const meta_type_t &meta);
 std::vector<std::list<int>> recover_chains_from_meta_edges(
-    const std::map<std::pair<int, int>, std::pair<int, std::vector<int>>>
-        &meta);
+    const meta_type_t &meta);
 
 // split triangles according to slice_vv
 // while maintaining feature_edges correctly tagged.
@@ -71,6 +68,9 @@ bool feature_sanity(const RowMatd &mV, RowMati &mE);
 // to promote the grouping of feature edges, without the need of fractional.
 bool feature_pre_split(RowMatd &V, RowMati &F, RowMati &feature_edges,
                        double threshold, std::vector<int> &face_parent);
+
+
+void reverse_feature_order(meta_type_t &);
 }  // namespace prism
 
 #endif

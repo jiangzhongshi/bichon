@@ -748,3 +748,16 @@ bool prism::feature_pre_split(RowMatd &V, RowMati &F, RowMati &feature_edges,
   spdlog::info("ael {}", igl::avg_edge_length(V, F));
   return true;
 }
+
+void prism::reverse_feature_order(prism::meta_type_t &pc_meta) {
+  prism::meta_type_t meta;
+  if (pc_meta.empty())
+    return;
+  for (auto [a, b] : pc_meta) {
+    auto a1 = std::pair{a.second, a.first};
+    auto b1 = b;
+    b1.second = std::vector<int>(b.second.rbegin(), b.second.rend());
+    meta.emplace(a1, b1);
+  }
+  pc_meta = std::move(meta);
+}

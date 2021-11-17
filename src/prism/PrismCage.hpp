@@ -55,8 +55,7 @@ struct PrismCage {
 
   // marked feature edges.
   // a map from endpoints to chain id and list of vertices. As a feature representation.
-  using meta_type_t = std::map<std::pair<int, int>, std::pair<int, std::vector<int>>>;
-  meta_type_t meta_edges;
+  prism::meta_type_t meta_edges;
 
   // specified constraint points (for distance bound) on each face.
   std::vector<std::vector<int>> constraints_per_face;

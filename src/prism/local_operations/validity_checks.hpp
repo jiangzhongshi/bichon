@@ -148,6 +148,7 @@ distort_check(const std::vector<Vec3d> &base,
               const RowMatd &refV, const RowMati &refF, double distortion_bound,
               int num_freeze, bool bundled_intersection = false);
 
+/// @brief this is the distortion function used by snapper.
 bool feature_handled_distort_check(const PrismCage &pc,
                                    const prism::local::RemeshOptions &option,
                                    const std::vector<Vec3i> &moved_tris,

@@ -266,7 +266,7 @@ int feature_collapse_pass(PrismCage &pc, RemeshOptions &option) {
     }
     return u2;
     };
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   int global_tick = 0;
   while (!queue.empty()) {
     auto [l, f, e, v0, v1, ignore] = queue.top();
@@ -486,7 +486,7 @@ int feature_slide_pass(PrismCage &pc, RemeshOptions &option) {
   std::vector<std::vector<int>> VF, VFi;
   igl::vertex_triangle_adjacency(
       V.size(), Eigen::Map<RowMati>(F[0].data(), F.size(), 3), VF, VFi);
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   for (auto vid : verts_on_feat) {
     auto nb = VF[vid], nbi = VFi[vid];
     // only do sth when two feature
@@ -620,7 +620,7 @@ int feature_split_pass(PrismCage &pc, prism::local::RemeshOptions &option) {
   std::vector<std::vector<int>> VF, VFi;
   igl::vertex_triangle_adjacency(
       V.size(), Eigen::Map<RowMati>(F[0].data(), F.size(), 3), VF, VFi);
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   int global_tick = 0;
   while (!queue.empty()) {
     auto [l, f0, e0, u0, u1] = queue.top();

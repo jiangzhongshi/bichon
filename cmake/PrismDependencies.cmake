@@ -75,8 +75,15 @@ endif()
 #   add_library(tbb::tbb ALIAS tbb_static)
 # endif()
 
+function(prism_download_file url name)
+  if (NOT EXISTS ${name})
+    file(DOWNLOAD ${url} ${name})
+  endif()
+endfunction()
+
+
 if (NOT TARGET cvc3_rational)
-  file(DOWNLOAD https://raw.githubusercontent.com/wildmeshing/fTetWild/master/src/external/Rational.h
+  prism_download_file(https://raw.githubusercontent.com/wildmeshing/fTetWild/master/src/external/Rational.h
   ${PRISM_EXTERNAL}/rational/Rational.h)
   add_library(cvc3_rational INTERFACE)
   target_include_directories(cvc3_rational INTERFACE ${PRISM_EXTERNAL}/rational/)
@@ -84,7 +91,7 @@ if (NOT TARGET cvc3_rational)
 endif()
 
 if (NOT TARGET mitsuba_autodiff)
-  file(DOWNLOAD https://raw.githubusercontent.com/polyfem/polyfem/master/src/utils/autodiff.h
+  prism_download_file(https://raw.githubusercontent.com/polyfem/polyfem/master/src/utils/autodiff.h
   ${PRISM_EXTERNAL}/autodiff/autodiff_mitsuba.h)
   add_library(mitsuba_autodiff INTERFACE)
   target_include_directories(mitsuba_autodiff INTERFACE ${PRISM_EXTERNAL}/autodiff/)

@@ -570,7 +570,15 @@ auto find_rejection_trackee(const RowMati &F,
   }
   return reject_faces;
 };
-// this is the distortion function used by snapper.
+
+template std::set<int> find_rejection_trackee(
+  const RowMati &,
+  const std::vector<std::vector<int>> &,
+  const std::vector<std::vector<int>> &,
+  const std::vector<int> &,
+  std::vector<int>::iterator, std::vector<int>::iterator
+);
+
 bool feature_handled_distort_check(const PrismCage &pc,
                                    const prism::local::RemeshOptions &option,
                                    const std::vector<Vec3i> &moved_pris,
@@ -604,9 +612,6 @@ bool feature_handled_distort_check(const PrismCage &pc,
       }
       auto &seg = it0->second.second;
       auto reject = std::set<int>();
-      if (seg.empty())
-        throw std::runtime_error(
-            "empty segs. This is ok, but next line should change.");
       if (left)
         reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, seg,
                                         seg.begin(), seg.end());
@@ -738,7 +743,7 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
       auto [v0, v1, v2] =
           std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
       // there is no left/right here, since identify_zig already handled it.
-      auto reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs, // TODO padding required here.
+      auto reject = find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs, 
                                         segs.begin(), segs.end());
 
       set_minus(combined_tracks, reject, remain_track);

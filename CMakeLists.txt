@@ -18,6 +18,7 @@ set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 add_subdirectory(src)
 
 option(PRISM_TESTS "Unit Tests" ON)
+option(PRISM_ENABLE_ASAN "enable ASAN for prism" OFF)
 if(PRISM_TESTS)
   include(CTest)
   add_subdirectory(tests)

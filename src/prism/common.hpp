@@ -197,13 +197,16 @@ constexpr auto non_empty_intersect = [](auto& A, auto& B) {
   return !vec.empty();
 };
 
-constexpr auto set_minus = [](const auto& A, const auto& B, auto& C) {
+constexpr auto set_minus = [](const auto &A, const auto &B, auto &C) {
   std::set_difference(A.begin(), A.end(), B.begin(), B.end(),
                       std::inserter(C, C.begin()));
 };
-constexpr auto set_add_to = [](const auto& A, auto& B) {
+constexpr auto set_add_to = [](const auto &A, auto &B) {
   std::merge(A.begin(), A.end(), B.begin(), B.end(),
              std::inserter(B, B.begin()));
 };
-
+namespace prism {
+using meta_type_t =
+    std::map<std::pair<int, int>, std::pair<int, std::vector<int>>>;
+};
 #endif

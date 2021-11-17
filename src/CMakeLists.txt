@@ -69,7 +69,7 @@ add_executable(cumin_bin)
 target_sources(cumin_bin PRIVATE pipeline_schedules.cpp curve_in_shell.cpp)
 target_link_libraries(cumin_bin prism_library cumin_library CLI11::CLI11 json libTetShell)
 
-if (ENABLE_ASAN)
+if (PRISM_ENABLE_ASAN)
   target_compile_options(cumin_bin PUBLIC "-fsanitize=address")
   target_link_options(cumin_bin PUBLIC "-fsanitize=address")
 endif()

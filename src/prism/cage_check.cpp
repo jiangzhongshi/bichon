@@ -19,6 +19,11 @@
 #include "prism/predicates/inside_octahedron.hpp"
 
 namespace prism::local_validity {
+template <typename T>
+std::set<int> find_rejection_trackee(const RowMati &F,
+                                     const std::vector<std::vector<int>> &VF,
+                                     const std::vector<std::vector<int>> &VFi,
+                                     const std::vector<int> &seg, T, T);
 std::optional<std::vector<std::set<int>>> distort_check(
     const std::vector<Vec3d> &,
     const std::vector<Vec3d> &,  // placed new verts
@@ -53,15 +58,19 @@ bool prism::cage_check::verify_edge_based_track(
     auto [oppo_vid, rej_id, segs] =
         prism::local_validity::identify_zig(meta, f);
     if (rej_id == -10) {
-      spdlog::error("Not allow two features in same triangle");
+      spdlog::critical("Not allow two features in same triangle");
       throw std::runtime_error("Not allow two features in same triangle");
       return false;
     }
     if (rej_id >= 0) {
-      // throw std::runtime_error("polyshell crt not modified");
       auto [v0, v1, v2] =
           std::tie(f[oppo_vid], f[(oppo_vid + 1) % 3], f[(oppo_vid + 2) % 3]);
-
+      auto reject = prism::local_validity::find_rejection_trackee(pc.ref.F, pc.ref.VF, pc.ref.VFi, segs, 
+                                        segs.begin(), segs.end());
+      if (reject.find(i) != reject.end()) {
+        spdlog::debug("should have been rejected p{} t{}", sh, i);
+        return false;
+      }
       auto [local_base, local_mid, local_top, zig_tris, _] =
           prism::local_validity::zig_constructor(pc, v0, v1, v2, segs, true);
       auto castmatd = [](auto &vec) {
@@ -69,7 +78,6 @@ bool prism::cage_check::verify_edge_based_track(
         vec2eigen(vec, mat);
         return mat;
       };
-
       auto tracks = prism::local_validity::distort_check(
           local_base, local_mid, local_top, zig_tris, std::set<int>{i}, refV,
           refF, distortion, f[0] < num_freeze ? 1 : 0, true);
@@ -83,7 +91,7 @@ bool prism::cage_check::verify_edge_based_track(
           num_freeze, option.dynamic_hashgrid);
       return (tracks && tracks.value()[0].size() > 0);
     }
-  };
+  }; // function verify
   // check surjective.
   {
     Eigen::VectorXi flags_per_face(pc.ref.F.rows());

@@ -37,19 +37,6 @@ auto post_collapse = [](auto &complete_cp) {
                     complete_cp.end());
 };
 
-auto reverse_feature_order = [](PrismCage &pc,
-                                prism::local::RemeshOptions &option) {
-  PrismCage::meta_type_t meta;
-  if (pc.meta_edges.empty())
-    return;
-  for (auto [a, b] : pc.meta_edges) {
-    auto a1 = std::pair{a.second, a.first};
-    auto b1 = b;
-    b1.second = std::vector<int>(b.second.rbegin(), b.second.rend());
-    meta.emplace(a1, b1);
-  }
-  pc.meta_edges = std::move(meta);
-};
 
 auto checker_in_main = [](const auto &pc, const auto &option, bool enable) {
   if (!enable)
@@ -658,7 +645,7 @@ void feature_and_curve(std::string filename, std::string fgname,
         post_collapse(complete_cp);
       }
       checker(serialize_level > 7);
-      reverse_feature_order(*pc, option);
+      prism::reverse_feature_order(pc->meta_edges);
     }
     checker(serialize_level > 3);
     return col;
@@ -725,7 +712,7 @@ void feature_and_curve(std::string filename, std::string fgname,
     relax();
     if (col == 0)
       break;
-    reverse_feature_order(*pc, option);
+    prism::reverse_feature_order(pc->meta_edges);
     if (serialize_level > 4)
       pc->serialize(fmt::format("{}_col{}.h5", ser_file, collapse_iteration),
                     prism::curve::save_cp(complete_cp));
@@ -746,7 +733,7 @@ void feature_and_curve(std::string filename, std::string fgname,
       relax();
       collapse();
       relax();
-      reverse_feature_order(*pc, option);
+      prism::reverse_feature_order(pc->meta_edges);
       if (serialize_level > 8)
         pc->serialize(fmt::format("{}_spl{}_imp{}.h5", ser_file,
                                   split_iteration, inside_improve_iteration),

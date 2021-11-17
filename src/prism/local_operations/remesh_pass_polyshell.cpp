@@ -117,7 +117,7 @@ int prism::local::zig_collapse_pass(PrismCage &pc, RemeshOptions &option) {
   auto [FF, FFi] = prism::local::triangle_triangle_adjacency(F);
   std::vector<std::vector<int>> refVF, refVFi;
   igl::vertex_triangle_adjacency(pc.ref.V.rows(), pc.ref.F, refVF, refVFi);
-  std::vector<int> rejections_steps(10, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   // pop
   int global_tick = 0;
   while (!queue.empty()) {
@@ -296,11 +296,11 @@ int prism::local::zig_slide_pass(PrismCage &pc, RemeshOptions &option) {
   std::vector<std::vector<int>> VF, VFi;
   igl::vertex_triangle_adjacency(
       V.size(), Eigen::Map<RowMati>(F[0].data(), F.size(), 3), VF, VFi);
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   for (auto vid : verts_on_feat) {
     auto nb = VF[vid], nbi = VFi[vid];
     // only do sth when two feature
-    std::vector<PrismCage::meta_type_t::iterator> nb_feat;
+    std::vector<prism::meta_type_t::iterator> nb_feat;
     for (auto i = 0; i < nb.size(); i++) {
       auto v0 = vid, v1 = F[nb[i]][(nbi[i] + 1) % 3],
            v2 = F[nb[i]][(nbi[i] + 2) % 3];
@@ -418,7 +418,7 @@ int prism::local::zig_split_pass(PrismCage &pc,
   std::vector<std::vector<int>> VF, VFi;
   igl::vertex_triangle_adjacency(
       V.size(), Eigen::Map<RowMati>(F[0].data(), F.size(), 3), VF, VFi);
-  std::vector<int> rejections_steps(8, 0);
+  std::vector<int> rejections_steps(prism::local_validity::PolyOpError::kMax, 0);
   int global_tick = 0;
   while (!queue.empty()) {
     auto [l, f0, e0, u0, u1] = queue.top();

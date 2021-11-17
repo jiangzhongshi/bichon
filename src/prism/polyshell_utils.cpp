@@ -9,7 +9,7 @@
 #include <highfive/H5Easy.hpp>
 
 auto prism::local_validity::identify_zig(
-    const PrismCage::meta_type_t &meta_edges,
+    const prism::meta_type_t &meta_edges,
     const Vec3i &f) -> std::tuple<int, int, std::vector<int>> {
   auto oppo_vid = -1;
   auto cid = -1;

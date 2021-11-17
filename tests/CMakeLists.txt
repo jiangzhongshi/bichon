@@ -52,7 +52,7 @@ target_include_directories(prism_tests PUBLIC ${PRISM_EXTERNAL}/rational/)
 
 target_compile_options(prism_tests PUBLIC "-Wno-deprecated")
 
-if (ENABLE_ASAN)
+if (PRISM_ENABLE_ASAN)
   message(STATUS "[prism] enabled asan ubsan for test")
   target_compile_options(prism_tests PUBLIC "-fsanitize=undefined")
   target_compile_options(prism_tests PUBLIC "-fsanitize=address")
