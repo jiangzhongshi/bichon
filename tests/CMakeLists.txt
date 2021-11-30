@@ -38,6 +38,7 @@ target_sources(prism_tests PRIVATE
                 zig_shell_collapse.cpp
                 curve_fitting.cpp
                 tangential_smooth_bin.cpp
+                sphere_refine.cpp
                 remesh_shell_bin.cpp)
 
 target_link_libraries(prism_tests PUBLIC doctest cumin_library prism::prism json)
