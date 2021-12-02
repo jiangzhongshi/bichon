@@ -54,7 +54,8 @@ static constexpr std::array<std::array<int, 3>, 6> m_local_faces = {
 
 struct TetAttr {
   std::array<int, 4> prism_id = {{-1, -1, -1, -1}};
-  std::shared_ptr<PrismCage> pc = nullptr;
+  bool is_removed = false;
+  Vec4i conn;
 };
 
 struct VertAttr {
@@ -62,9 +63,16 @@ struct VertAttr {
   bool on_boundary = false;
 };
 
-auto tetra_validity = [](auto&, auto&){return true;};
+auto tetra_validity = [](const std::vector<VertAttr>& tet_pos, const Vec4i& t){
+  return GEO::PCK::orient_3d(
+    tet_pos[t[0]].mid.data()
+    tet_pos[t[1]].mid.data()
+    tet_pos[t[2]].mid.data()
+    tet_pos[t[3]].mid.data()
+    );
+};
 
-bool split_edge(PrismCage& pc, std::vector<VertAttr> &tet_pos, std::vector<Vec4i> &tet_conn,
+bool split_edge(PrismCage& pc, std::vector<VertAttr> &tet_pos,// std::vector<Vec4i> &tet_conn,
                 std::vector<TetAttr> &tet_attrs,
                 std::vector<std::vector<int>> vertex_conn, int v0, int v1) {
   prism::local::RemeshOptions option;
@@ -74,7 +82,6 @@ bool split_edge(PrismCage& pc, std::vector<VertAttr> &tet_pos, std::vector<Vec4i
 
   std::vector<Vec4i> new_tets;
   std::vector<TetAttr> new_attrs;
-  // std::vector<int> remove_tets;
   auto vx = tet_pos.size();
   auto replace = [](auto &arr, auto a, auto b) {
     for (auto i = 0; i < arr.size(); i++) {
@@ -92,18 +99,18 @@ bool split_edge(PrismCage& pc, std::vector<VertAttr> &tet_pos, std::vector<Vec4i
   for (auto t : affected) {
     for (auto j = 0; j < 4; j++) {
       if (tet_attrs[t].prism_id[j] != -1 // boundary
-      && tet_conn[t][j] != v0 //  contains v0 AND v1 
-      && tet_conn[t][j] != v1 )// 
+      && tet_attrs[t].conn[j] != v0 //  contains v0 AND v1 
+      && tet_attrs[t].conn[j] != v1 )// 
       {
         boundary_edge = true;
         bnd_pris.push_back(tet_attrs[t].prism_id[j]);
       }
     }
-    new_tets.push_back(tet_conn[t]);
+    new_tets.push_back(tet_attrs[t].conn);
     new_attrs.push_back(tet_attrs[t]);
     replace(new_tets.back(), v0, vx);
 
-    new_tets.push_back(tet_conn[t]);
+    new_tets.push_back(tet_attrs[t].conn);
     new_attrs.push_back(tet_attrs[t]);
     replace(new_tets.back(), v1, vx);
   }
@@ -146,9 +153,29 @@ bool split_edge(PrismCage& pc, std::vector<VertAttr> &tet_pos, std::vector<Vec4i
         local_cp);
     if (flag != 0)
       return rollback();
+
+    // distribute and assign new_tracks.
   }
 
-  // update conn
+  for (auto ti: affected) {
+    tet_attrs[ti].is_removed = true;
+  }
+  // update connectivity: VT TODO
+  auto n_tet = tet_attrs.size();
+  for (auto t: new_tets) {
+    for (auto i=0; i<t.size(); i++) {
+      set_minus(vertex_conn[t[i]], affected);
+      set_insert(vertex_conn[t[i]], {n_tet});
+    }
+    n_tet ++;
+    auto t_a = TetAttr();
+    t_a.conn = t;
+    // TODO: boundary
+    tet_attrs.emplace_back(t_a);
+  }
+  assert(n_tet == tet_attrs.size());
+  // remove `inter`, append `new_tid`
+  // assigns split TetAttrs.
   return true;
 };
 
