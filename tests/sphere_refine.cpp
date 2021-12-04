@@ -9,8 +9,12 @@
 #include <spdlog/spdlog.h>
 
 #include <geogram/basic/geometry.h>
+#include <geogram/numerics/predicates.h>
+#include <algorithm>
 #include <highfive/H5Easy.hpp>
+#include <iterator>
 #include <numeric>
+#include <prism/common.hpp>
 #include <prism/geogram/AABB.hpp>
 #include <prism/geogram/geogram_utils.hpp>
 #include <prism/local_operations/remesh_pass.hpp>
@@ -19,6 +23,7 @@
 #include <prism/spatial-hash/AABB_hash.hpp>
 #include <prism/spatial-hash/self_intersection.hpp>
 #include "prism/PrismCage.hpp"
+#include "spdlog/common.h"
 
 auto circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3) -> double
 {
@@ -37,6 +42,11 @@ auto set_inter = [](auto& A, auto& B) {
     return vec;
 };
 
+auto set_insert = [](auto& A, auto& a) {
+    auto it = std::lower_bound(A.begin(), A.end(), a, std::greater<int>());
+    A.insert(it, a);
+};
+
 namespace wmtk {
 static constexpr std::array<std::array<int, 2>, 6> m_local_edges = {
     {{{0, 1}}, {{1, 2}}, {{2, 0}}, {{0, 3}}, {{1, 3}}, {{2, 3}}}}; // local edges within a tet
@@ -47,41 +57,61 @@ static constexpr std::array<std::array<int, 3>, 6> m_local_faces = {
 
 struct TetAttr
 {
-    std::array<int, 4> prism_id = {{-1, -1, -1, -1}};
+    std::array<int, 4> prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
     bool is_removed = false;
     Vec4i conn;
 };
 
 struct VertAttr
 {
-    Vec3d mid, top, bot;
+    Vec3d pos;
     bool on_boundary = false;
 };
 
-auto tetra_validity = [](const std::vector<VertAttr>& tet_pos, const Vec4i& t) {
-    return GEO::PCK::orient_3d(tet_pos[t[0]]
-                                   .mid.data() tet_pos[t[1]]
-                                   .mid.data() tet_pos[t[2]]
-                                   .mid.data() tet_pos[t[3]]
-                                   .mid.data());
-};
+auto tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
+{
+    return GEO::PCK::orient_3d(
+        vert_attrs[t[0]].pos.data(),
+        vert_attrs[t[1]].pos.data(),
+        vert_attrs[t[2]].pos.data(),
+        vert_attrs[t[3]].pos.data());
+}
+
+auto update_pc(
+    PrismCage& pc,
+    std::vector<int>& new_fid,
+    std::vector<Vec3i>& new_conn,
+    const std::vector<std::set<int>>& new_tracks)
+{
+    for (auto i = 0; i < new_fid.size(); i++) {
+        auto f = new_fid[i];
+        if (f >= pc.F.size()) {
+            pc.F.resize(f + 1);
+            pc.track_ref.resize(f + 1);
+        }
+        pc.F[f] = new_conn[i];
+        pc.track_ref[f] = new_tracks[i];
+    }
+}
 
 bool split_edge(
     PrismCage& pc,
-    std::vector<VertAttr>& tet_pos, // std::vector<Vec4i> &tet_conn,
+    std::vector<VertAttr>& vert_attrs,
     std::vector<TetAttr>& tet_attrs,
-    std::vector<std::vector<int>> vertex_conn,
+    std::vector<std::vector<int>> vert_conn,
     int v0,
     int v1)
 {
     prism::local::RemeshOptions option;
-    auto& nb0 = vertex_conn[v0];
-    auto& nb1 = vertex_conn[v1];
+    auto& nb0 = vert_conn[v0];
+    auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
+    assert(!affected.empty());
+    spdlog::info("Splitting...");
 
     std::vector<Vec4i> new_tets;
     std::vector<TetAttr> new_attrs;
-    auto vx = tet_pos.size();
+    auto vx = vert_attrs.size();
     auto replace = [](auto& arr, auto a, auto b) {
         for (auto i = 0; i < arr.size(); i++) {
             if (arr[i] == a) {
@@ -99,8 +129,7 @@ bool split_edge(
         for (auto j = 0; j < 4; j++) {
             if (tet_attrs[t].prism_id[j] != -1 // boundary
                 && tet_attrs[t].conn[j] != v0 //  contains v0 AND v1
-                && tet_attrs[t].conn[j] != v1) //
-            {
+                && tet_attrs[t].conn[j] != v1) {
                 boundary_edge = true;
                 bnd_pris.push_back(tet_attrs[t].prism_id[j]);
             }
@@ -114,23 +143,31 @@ bool split_edge(
         replace(new_tets.back(), v1, vx);
     }
 
-    tet_pos.push_back({});
-    tet_pos.back().mid = ((tet_pos[v0].mid + tet_pos[v1].mid) / 2);
-    tet_pos.back().on_boundary = boundary_edge;
+    vert_attrs.push_back({});
+    vert_attrs.back().pos = ((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2);
+    vert_attrs.back().on_boundary = boundary_edge;
 
     if (boundary_edge) {
+        spdlog::trace("Handling boundary edge");
         assert(bnd_pris.size() == 2);
-        assert(tet_pos[v0].on_boundary && tet_pos[v1].on_boundary);
-        tet_pos.back().top = ((tet_pos[v0].top + tet_pos[v1].top) / 2);
-        tet_pos.back().bot = ((tet_pos[v0].bot + tet_pos[v1].bot) / 2);
+        assert(vert_attrs[v0].on_boundary && vert_attrs[v1].on_boundary);
+        // vert_attrs.back().top = ((vert_attrs[v0].top + vert_attrs[v1].top) / 2);
+        // vert_attrs.back().bot = ((vert_attrs[v0].bot + vert_attrs[v1].bot) / 2);
+        pc.top.push_back((pc.top[v0] + pc.top[v1]) / 2);
+        pc.base.push_back((pc.base[v0] + pc.base[v1]) / 2);
+        pc.mid.push_back(vert_attrs.back().pos);
+        spdlog::trace("pusher {} {}", pc.top.back(), pc.base.back());
     }
 
     auto rollback = [&]() {
-        tet_pos.pop_back();
+        vert_attrs.pop_back();
+        pc.top.pop_back();
+        pc.base.pop_back();
+        pc.mid.pop_back();
         return false;
     };
     for (auto t : new_tets) { // Vec4i
-        if (!tetra_validity(tet_pos, t)) return rollback();
+        if (!tetra_validity(vert_attrs, t)) return rollback();
     }
 
     std::vector<int> new_fid;
@@ -141,6 +178,7 @@ bool split_edge(
         auto f0 = bnd_pris.front(), f1 = bnd_pris.back();
         std::vector<int> old_fids = {f0, f1};
         moved_tris = std::vector<Vec3i>{F[f0], F[f1], F[f0], F[f1]};
+        spdlog::trace("vx {}", vx);
         replace(moved_tris[0], v0, vx);
         replace(moved_tris[1], v0, vx);
         replace(moved_tris[2], v1, vx);
@@ -171,78 +209,122 @@ bool split_edge(
     auto n_tet = tet_attrs.size();
     for (auto t : new_tets) {
         for (auto i = 0; i < t.size(); i++) {
-            set_minus(vertex_conn[t[i]], affected);
-            set_insert(vertex_conn[t[i]], {n_tet});
+            auto diff = std::vector<int>();
+            set_minus(vert_conn[t[i]], affected, diff);
+            vert_conn[t[i]] = std::move(diff);
+
+            set_insert(vert_conn[t[i]], n_tet);
         }
         n_tet++;
         auto t_a = TetAttr();
         t_a.conn = t;
 
         // if face in t is a `moved_tris`, get the corresponding index (oppo vert).
-        for (auto j=0; j<4; j++) {
+        for (auto j = 0; j < 4; j++) {
             auto face = Vec3i();
-            for (auto k=0; k<3; k++) face[k] = t[(j+k+1)%4];
+            for (auto k = 0; k < 3; k++) face[k] = t[(j + k + 1) % 4];
             std::sort(face.begin(), face.end());
+            for (auto mi = 0; mi < moved_tris.size(); mi++) {
+                if (face == moved_tris[mi]) {
+                    t_a.prism_id[j] = new_fid[mi];
+                }
+            }
         }
-        auto fid = include_as_face(t, moved_tris[i]);
-        if (fid != -1) {
-          t.prism_id[fid] = 
-        }
+
         tet_attrs.emplace_back(t_a);
     }
     assert(n_tet == tet_attrs.size());
-    // remove `inter`, append `new_tid`
-    // assigns split TetAttrs.
+    // remove `affected`, append `new_tid`
     return true;
 };
+
 
 TEST_CASE("amr-sphere-prepare")
 {
     std::string filename = "../tests/data/sphere_40.obj.h5";
     PrismCage pc(filename);
+    spdlog::set_level(spdlog::level::trace);
 
     H5Easy::File file(filename, H5Easy::File::ReadOnly);
     auto tet_v = H5Easy::load<RowMatd>(file, "tet_v");
     auto tet_t = H5Easy::load<RowMati>(file, "tet_t");
     spdlog::info("Loading v {},t {} ", tet_v.rows(), tet_t.rows());
-
+    spdlog::info("Shell size v{}, f{}", pc.base.size(), pc.F.size());
     for (auto i = 0; i < tet_t.rows(); i++) {
         auto r = circumradi2(
             tet_v.row(tet_t(i, 0)),
             tet_v.row(tet_t(i, 1)),
             tet_v.row(tet_t(i, 2)),
             tet_v.row(tet_t(i, 3)));
-        // spdlog::info("radius2 {}", r);
     }
+
+    auto vert_info = [&tet_v, &pc]() {
+        std::vector<VertAttr> vert_attrs(tet_v.rows());
+        auto nshell = pc.mid.size();
+        for (auto i = 0; i < tet_v.rows(); i++) {
+            vert_attrs[i].pos = tet_v.row(i);
+        }
+        for (auto i = 0; i < pc.mid.size(); i++) {
+            assert(vert_attrs[i].pos == pc.mid[i]);
+            // vert_attrs[i].top = pc.top[i];
+            // vert_attrs[i].bot = pc.base[i];
+            vert_attrs[i].on_boundary = true;
+        }
+        pc.top.resize(tet_v.rows());
+        pc.base.resize(tet_v.rows());
+        pc.mid.resize(tet_v.rows());
+        return vert_attrs;
+    }();
 
     // Tet-Face (tet_t, k) -> Shell Prisms (pc.mF)
-    std::map<std::array<int, 3>, int> cell_finder;
-    for (auto i = 0; i < pc.F.size(); i++) {
-        auto pri = pc.F[i];
-        std::sort(pri.begin(), pri.end());
-        cell_finder.emplace(pri, i);
-    }
-    RowMati marker = RowMati::Constant(tet_t.rows(), 4, -1);
-    for (auto i = 0; i < tet_t.rows(); i++) {
-        for (auto j = 0; j < 4; j++) {
-            auto face = std::array<int, 3>();
-            for (auto k = 0; k < 3; k++) face[k] = tet_t(i, (j + k) % 4);
-            std::sort(face.begin(), face.end());
-            auto it = cell_finder.find(face);
-            if (it != cell_finder.end()) { // found
-                marker(i, j) = it->second;
+    auto tet_info = [&tet_t, &pc]() {
+        std::vector<TetAttr> tet_attrs(tet_t.rows());
+
+        std::map<std::array<int, 3>, int> cell_finder;
+        for (auto i = 0; i < pc.F.size(); i++) {
+            auto pri = pc.F[i];
+            std::sort(pri.begin(), pri.end());
+            cell_finder.emplace(pri, i);
+        }
+        // RowMati marker = RowMati::Constant(tet_t.rows(), 4, -1);
+        for (auto i = 0; i < tet_t.rows(); i++) {
+            auto& t_a = tet_attrs[i];
+            for (auto j = 0; j < 4; j++) {
+                t_a.conn[j] = tet_t(i, j);
+
+                auto face = std::array<int, 3>();
+                for (auto k = 0; k < 3; k++) face[k] = tet_t(i, (j + k + 1) % 4);
+                std::sort(face.begin(), face.end());
+                auto it = cell_finder.find(face);
+                if (it != cell_finder.end()) { // found
+                    t_a.prism_id[j] = it->second;
+                }
             }
         }
-    }
+        return tet_attrs;
+    }();
+
+    auto vert_tet_conn = [&tet_info, n_verts = vert_info.size()]() {
+        auto vt_conn = std::vector<std::vector<int>>(n_verts);
+        for (auto i = 0; i < tet_info.size(); i++) {
+            for (auto j = 0; j < 4; j++) vt_conn[tet_info[i].conn[j]].emplace_back(i);
+        }
+        std::for_each(vt_conn.begin(), vt_conn.end(), [](auto& vec) {
+            std::sort(vec.begin(), vec.end());
+        });
+        return vt_conn;
+    }();
 
     // count how many marks
-    [&marker, &tet_t, &pc]() {
+    [&tet_info, &tet_t, &pc]() {
         auto cnt = 0;
         for (auto i = 0; i < tet_t.rows(); i++) {
             for (auto j = 0; j < 4; j++) {
-                if (marker(i, j) != -1) cnt++;
+                if (tet_info[i].prism_id[j] != -1) cnt++;
             }
         }
         CHECK_EQ(cnt, pc.F.size());
     }();
+
+    split_edge(pc, vert_info, tet_info, vert_tet_conn, 0, 1);
 }
