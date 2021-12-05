@@ -74,6 +74,13 @@ if (PRISM_ENABLE_ASAN)
   target_link_options(cumin_bin PUBLIC "-fsanitize=address")
 endif()
 
+add_library(batm_library
+          batm/tetra_utils.cpp)
+target_compile_features(batm_library PUBLIC cxx_std_17)
+target_link_libraries(batm_library PUBLIC prism_library)
+target_include_directories(batm_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/)
+
+
 option(PYBICHON "Enable Python Binding" OFF)
 if (PYBICHON)
   find_package(PythonInterp QUIET)

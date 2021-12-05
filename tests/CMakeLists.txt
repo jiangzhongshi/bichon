@@ -38,10 +38,11 @@ target_sources(prism_tests PRIVATE
                 zig_shell_collapse.cpp
                 curve_fitting.cpp
                 tangential_smooth_bin.cpp
+                tetra_opt.cpp
                 sphere_refine.cpp
                 remesh_shell_bin.cpp)
 
-target_link_libraries(prism_tests PUBLIC doctest cumin_library prism::prism json)
+target_link_libraries(prism_tests PUBLIC doctest cumin_library prism::prism batm_library json)
  #spdlog::spdlog igl::core highfive geogram mitsuba_autodiff igl::cgal)
 
 target_compile_features(prism_tests PUBLIC cxx_std_17)
