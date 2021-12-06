@@ -981,7 +981,6 @@ int cutet_swap(RowMatd &lagr, RowMati &p4T, double stop_energy) {
     auto t0_id = old_tids[0];
     int t1_id = old_tids[1];
     int t2_id = old_tids[2];
-    std::array<int, 2> t12_ids = {{t1_id, t2_id}};
     auto n0_id = -1, n1_id = -1, n2_id = -1;
     for (int j = 0; j < 4; j++) {
       auto v0j = tets[t0_id][j];

@@ -46,9 +46,9 @@ void prism::geo::init_geogram() {
   GEO::initialize(GEO::GEOGRAM_NO_HANDLER);
 
   // Import standard command line arguments, and custom ones
-  GEO::CmdLine::import_arg_group("standard");
-  GEO::CmdLine::import_arg_group("pre");
-  GEO::CmdLine::import_arg_group("algo");
+  // GEO::CmdLine::import_arg_group("standard");
+  // GEO::CmdLine::import_arg_group("pre");
+  // GEO::CmdLine::import_arg_group("algo");
   // GEO::CmdLine::import_arg_group("sys");
   GEO::CmdLine::set_arg("sys:assert", "throw");
 }
