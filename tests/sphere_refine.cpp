@@ -16,11 +16,11 @@
 #include <prism/common.hpp>
 #include <prism/geogram/AABB.hpp>
 #include <prism/geogram/geogram_utils.hpp>
+#include <prism/local_operations/remesh_pass.hpp>
 #include <prism/spatial-hash/AABB_hash.hpp>
 #include <prism/spatial-hash/self_intersection.hpp>
 #include "prism/PrismCage.hpp"
 #include "spdlog/common.h"
-#include <prism/local_operations/remesh_pass.hpp>
 
 
 TEST_CASE("amr-sphere-prepare")
@@ -43,7 +43,8 @@ TEST_CASE("amr-sphere-prepare")
             tet_v.row(tet_t(i, 3)));
     }
 
-    prism::local::RemeshOptions option;
+    prism::local::RemeshOptions option(pc.mid.size(), 0.1);
     auto [vert_info, tet_info, vert_tet_conn] = prism::tet::prepare_tet_info(pc, tet_v, tet_t);
     split_edge(pc, option, vert_info, tet_info, vert_tet_conn, 0, 1);
+    smooth_vertex(pc, option, vert_info, tet_info, vert_tet_conn, 46);
 }

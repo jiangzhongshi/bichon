@@ -48,7 +48,7 @@ int tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);
 
 bool split_edge(
     PrismCage& pc,
-    const prism::local::RemeshOptions& option,
+    prism::local::RemeshOptions& option,
     std::vector<VertAttr>& vert_attrs,
     std::vector<TetAttr>& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
