@@ -63,4 +63,23 @@ bool smooth_vertex(
     const std::vector<std::vector<int>>& vert_conn,
     int v0);
 
+bool swap_face(
+    const PrismCage& pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0_id,
+    int v1_id,
+    int v2_id);
+
+bool swap_edge(
+    const PrismCage& pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v1_id,
+    int v2_id);
+
 } // namespace prism::tet

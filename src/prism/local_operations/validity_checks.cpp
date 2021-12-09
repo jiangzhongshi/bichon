@@ -802,7 +802,7 @@ prism::local_validity::PolyOpError prism::local_validity::attempt_zig_remesh(
     set_add_to(s, total_sub_trackee);
   spdlog::trace("total distributed {} == prev {}", total_sub_trackee.size(),
                 combined_tracks.size());
-  spdlog::trace("total {}, from {}", total_sub_trackee, combined_tracks);
+  // spdlog::trace("total {}, from {}", total_sub_trackee, combined_tracks);
   assert(total_sub_trackee.size() == combined_tracks.size());
   if (option.curve_checker.first.has_value() &&
       !(std::any_cast<std::function<bool(

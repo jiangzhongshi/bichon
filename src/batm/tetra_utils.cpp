@@ -20,7 +20,7 @@ auto set_inter = [](auto& A, auto& B) {
 };
 
 auto set_insert = [](auto& A, auto& a) {
-    auto it = std::lower_bound(A.begin(), A.end(), a, std::greater<int>());
+    auto it = std::lower_bound(A.begin(), A.end(), a);
     A.insert(it, a);
 };
 
@@ -179,7 +179,7 @@ void update_tetra_conn(
 {
     // update connectivity: VT
     auto n_tet = tet_attrs.size();
-    vert_conn.resize(vert_conn.size() + 1);
+    vert_conn.resize(vert_attrs.size());
 
     // resetting prism_id.
     std::map<Vec3i, int> moved_pris_assigner;
@@ -213,6 +213,7 @@ void update_tetra_conn(
             vert_conn[t[i]] = std::move(diff);
 
             set_insert(vert_conn[t[i]], n_tet);
+            spdlog::trace("vert conn {}", vert_conn[t[i]]);
         }
         n_tet++;
         auto t_a = TetAttr();
@@ -223,7 +224,10 @@ void update_tetra_conn(
             auto face = Vec3i();
             for (auto k = 0; k < 3; k++) face[k] = vert_attrs[t[(j + k + 1) % 4]].mid_id;
             std::sort(face.begin(), face.end());
-            spdlog::trace("face {}", face);
+            if (face.front() == -1) {
+                continue;
+            }
+            // spdlog::trace("face {}", face);
             auto it = moved_pris_assigner.find(face);
             if (it != moved_pris_assigner.end()) {
                 t_a.prism_id[j] = it->second;
@@ -443,13 +447,14 @@ bool smooth_vertex(
         update_pc(pc, old_fids, moved_tris, new_tracks);
     }
 
+    spdlog::trace("Vertex Snapped!!");
     // not modifying connectivity.
     return true;
 }
 
 
 bool swap_edge(
-    PrismCage& pc,
+    const PrismCage& pc,
     const prism::local::RemeshOptions& option,
     std::vector<VertAttr>& vert_attrs,
     std::vector<TetAttr>& tet_attrs,
@@ -463,6 +468,7 @@ bool swap_edge(
     auto affected = set_inter(nb1, nb2);
     assert(!affected.empty());
     if (affected.size() != 3) {
+        spdlog::trace("Affect Neighbor Too Many {} (>2)", affected.size());
         return false;
     }
 
@@ -506,7 +512,7 @@ bool swap_edge(
     }
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-    return false;
+    return true;
 }
 
 
@@ -528,7 +534,9 @@ bool swap_face(
     auto affected = set_inter(inter0_1, nb2);
     if (affected.size() != 2) { // has to be on boundary, or an invalid face input.
         assert(edge_adjacent_boundary_face(tet_attrs, vert_conn, v0_id, v1_id).size() > 0);
+        return false;
     }
+
 
     // no top/bottom ordering of the two tets are assumed.
     auto t0 = affected.front(), t1 = affected.back();
