@@ -123,6 +123,7 @@ auto update_pc(
     std::vector<Vec3i>& new_conn,
     const std::vector<std::set<int>>& new_tracks)
 {
+    prism::local_validity::triangle_shifts(new_conn);
     for (auto i = 0; i < new_fid.size(); i++) {
         auto f = new_fid[i];
         if (f >= pc.F.size()) {
@@ -452,6 +453,118 @@ bool smooth_vertex(
     return true;
 }
 
+bool collapse_edge(
+    PrismCage& pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v1_id,
+    int v2_id)
+{
+    spdlog::debug("Entering {}-{}", v1_id, v2_id);
+    auto& nb1 = vert_conn[v1_id];
+    auto& nb2 = vert_conn[v2_id];
+    auto affected = set_inter(nb1, nb2);
+    assert(!affected.empty());
+
+    std::vector<int> old_tids = nb1;
+    std::vector<Vec4i> new_tets;
+    auto cnt_newtid = 0;
+
+    for (auto t : old_tids) {
+        auto line_tet = tet_attrs[t].conn;
+        auto v1_i = id_in_array(line_tet, v1_id);
+        auto v2_i = id_in_array(line_tet, v2_id);
+        assert(v1_i >= 0);
+        if (v2_i >= 0) continue;
+        line_tet[v1_i] = v2_id;
+        new_tets.emplace_back(line_tet);
+        cnt_newtid++;
+    }
+    assert(cnt_newtid < old_tids.size());
+
+    auto rollback = []() { return false; };
+    { // link condition
+        std::set<int> inter;
+        std::set_intersection(
+            nb1.begin(),
+            nb1.end(),
+            nb2.begin(),
+            nb2.end(),
+            std::inserter(inter, inter.end()));
+        if (inter.size() != old_tids.size() - cnt_newtid) {
+            spdlog::debug("Violated link condition");
+            return false;
+        }
+    }
+
+    for (auto t : new_tets) {
+        if (!tetra_validity(vert_attrs, t)) return false;
+    }
+    auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
+    auto old_fid = std::vector<int>();
+    auto new_fid = std::vector<int>();
+    auto moved_tris = std::vector<Vec3i>();
+    if (!bnd_faces.empty()) {
+        auto get_nb = [&vert_conn, &tet_attrs](auto v_id) {
+            auto nb = std::vector<int>();
+            for (auto t : vert_conn[v_id]) {
+                for (auto j = 0; j < 4; j++) {
+                    auto pid = tet_attrs[t].prism_id[j];
+                    if (tet_attrs[t].conn[j] != v_id && pid != -1) {
+                        // a surface adjacent to v1.
+                        nb.push_back(pid);
+                    }
+                }
+            }
+            std::sort(nb.begin(), nb.end());
+            return nb;
+        };
+
+
+        std::tie(old_fid, new_fid, moved_tris) = [neighbor0 = get_nb(v1_id),
+                                                  neighbor1 = get_nb(v2_id),
+                                                  &F = pc.F,
+                                                  &u1 = vert_attrs[v2_id].mid_id,
+                                                  &u0 = vert_attrs[v1_id].mid_id]() {
+            std::vector<Vec3i> moved_tris;
+            moved_tris.reserve(neighbor0.size() + neighbor1.size() - 4);
+
+            std::vector<int> new_fid, old_fid;
+            for (auto f : neighbor0) {
+                auto new_tris = F[f];
+                old_fid.push_back(f);
+                if (id_in_array(new_tris, u1) != -1) continue; // collapsed faces
+                replace(new_tris, u0, u1);
+                moved_tris.emplace_back(new_tris);
+                new_fid.push_back(f);
+            }
+
+            return std::tuple(old_fid, new_fid, moved_tris);
+        }();
+
+        std::vector<std::set<int>> new_tracks;
+        std::vector<RowMatd> local_cp;
+        auto flag = prism::local_validity::attempt_zig_remesh(
+            pc,
+            pc.track_ref,
+            option,
+            -1,
+            old_fid,
+            moved_tris,
+            new_tracks,
+            local_cp);
+        if (flag != 0) return rollback();
+
+        update_pc(pc, new_fid, moved_tris, new_tracks);
+    }
+
+    // vert_attrs[v1_id].removed = true;
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
+
+    return true;
+}
 
 bool swap_edge(
     const PrismCage& pc,

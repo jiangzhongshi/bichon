@@ -108,7 +108,7 @@ auto construct_face_queue = [](const auto& vert_info, const auto& tet_info) {
 };
 
 
-TEST_CASE("sphere-tet-collapse")
+TEST_CASE("sphere-tet-swap")
 {
     std::string filename = "../tests/data/sphere_40.obj.h5";
     PrismCage pc(filename);
@@ -129,4 +129,7 @@ TEST_CASE("sphere-tet-collapse")
         prism::tet::swap_face(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, v2);
     }
     spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    for (auto t : tet_info) {
+        if (!t.is_removed) CHECK(prism::tet::tetra_validity(vert_info, t.conn));
+    }
 }
