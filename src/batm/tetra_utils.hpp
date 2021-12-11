@@ -44,7 +44,7 @@ prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t);
 
 double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 
-int tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);
+bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);
 
 bool split_edge(
     PrismCage& pc,
@@ -82,4 +82,12 @@ bool swap_edge(
     int v1_id,
     int v2_id);
 
+bool collapse_edge(
+    PrismCage& pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v1_id,
+    int v2_id);
 } // namespace prism::tet

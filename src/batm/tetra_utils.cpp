@@ -108,13 +108,14 @@ double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3
     return GEO::distance2(center, geo_v[0]);
 }
 
-int tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
+bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
 {
-    return GEO::PCK::orient_3d(
+    auto flag = GEO::PCK::orient_3d(
         vert_attrs[t[0]].pos.data(),
         vert_attrs[t[1]].pos.data(),
         vert_attrs[t[2]].pos.data(),
         vert_attrs[t[3]].pos.data());
+    return flag == 1;
 }
 
 auto update_pc(
