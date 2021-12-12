@@ -1,10 +1,11 @@
 #include "tetra_utils.hpp"
 
-#include <geogram/basic/geometry.h>
-#include <geogram/numerics/predicates.h>
+#include "AMIPS.h"
+
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+#include <Eigen/Dense>
 #include <algorithm>
 #include <limits>
 #include <prism/PrismCage.hpp>
@@ -24,6 +25,23 @@ auto set_insert = [](auto& A, auto& a) {
     A.insert(it, a);
 };
 
+auto replace = [](auto& arr, auto a, auto b) {
+    for (auto i = 0; i < arr.size(); i++) {
+        if (arr[i] == a) {
+            arr[i] = b;
+            return i;
+        }
+    }
+    assert(false);
+    return -1;
+};
+
+auto id_in_array = [](auto& v, auto& k) {
+    for (auto i = 0; i < v.size(); i++) {
+        if (v[i] == k) return i;
+    }
+    return -1;
+};
 
 namespace prism::tet {
 
@@ -97,26 +115,6 @@ prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t)
     }();
     return std::tuple(vert_info, tet_info, vert_tet_conn);
 };
-double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3)
-{
-    std::array<GEO::vec3, 4> geo_v;
-    geo_v[0] = GEO::vec3(p0[0], p0[1], p0[2]);
-    geo_v[1] = GEO::vec3(p1[0], p1[1], p1[2]);
-    geo_v[2] = GEO::vec3(p2[0], p2[1], p2[2]);
-    geo_v[3] = GEO::vec3(p3[0], p3[1], p3[2]);
-    GEO::vec3 center = GEO::Geom::tetra_circum_center(geo_v[0], geo_v[1], geo_v[2], geo_v[3]);
-    return GEO::distance2(center, geo_v[0]);
-}
-
-bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
-{
-    auto flag = GEO::PCK::orient_3d(
-        vert_attrs[t[0]].pos.data(),
-        vert_attrs[t[1]].pos.data(),
-        vert_attrs[t[2]].pos.data(),
-        vert_attrs[t[3]].pos.data());
-    return flag == 1;
-}
 
 auto update_pc(
     PrismCage& pc,
@@ -152,23 +150,7 @@ auto edge_adjacent_boundary_face = [](auto& tet_attrs, auto& vert_conn, int v0, 
     }
     return bnd_pris;
 };
-auto replace = [](auto& arr, auto a, auto b) {
-    for (auto i = 0; i < arr.size(); i++) {
-        if (arr[i] == a) {
-            arr[i] = b;
-            return i;
-        }
-    }
-    assert(false);
-    return -1;
-};
 
-auto id_in_array = [](auto& v, auto& k) {
-    for (auto i = 0; i < v.size(); i++) {
-        if (v[i] == k) return i;
-    }
-    return -1;
-};
 
 void update_tetra_conn(
     const std::vector<VertAttr>& vert_attrs,
@@ -351,6 +333,50 @@ bool split_edge(
     return true;
 }
 
+auto get_newton_position = [](const auto& vert_attrs,
+                              const auto& tet_attrs,
+                              const auto& nb,
+                              int v0,
+                              const Vec3d& old_pos) {
+    auto orient_preserve_tet_reorder = [](auto& conn, auto v0) {
+        auto vl_id = id_in_array(conn, v0);
+        assert(vl_id != -1);
+        switch (vl_id) { // ABCD
+        case 1: // BA-DC
+            conn = {conn[1], conn[0], conn[3], conn[2]};
+            break;
+        case 2: // (CAB)D
+            conn = {conn[2], conn[0], conn[1], conn[3]};
+            break;
+        case 3: // 3102
+            conn = {conn[3], conn[1], conn[0], conn[2]};
+            break;
+        case 0:
+        default: break;
+        }
+        return conn;
+    };
+    // build assembles with v0 in the front.
+    std::vector<std::array<double, 12>> assembles(nb.size());
+    auto iter_id = 0;
+    for (auto t : nb) {
+        auto& T = assembles[iter_id];
+        std::array<size_t, 4> local_verts;
+        for (auto i = 0; i < 4; i++) local_verts[i] = tet_attrs[t].conn[i];
+        local_verts = orient_preserve_tet_reorder(local_verts, v0);
+
+        for (auto i = 0; i < 4; i++) {
+            for (auto j = 0; j < 3; j++) {
+                T[i * 3 + j] = vert_attrs[local_verts[i]].pos[j];
+            }
+        }
+        iter_id++;
+    }
+
+    return get_newton_position_from_assemble(assembles, old_pos);
+};
+
+
 bool smooth_vertex(
     PrismCage& pc,
     const prism::local::RemeshOptions& option,
@@ -402,8 +428,7 @@ bool smooth_vertex(
         newton_pos = get_snap_position();
         old_mid = pc.mid[pv0];
     } else {
-        // newton_pos = get_newton_position();
-        return false; // TODO: implement newton.
+        newton_pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
     }
 
     auto rollback = [&]() {
