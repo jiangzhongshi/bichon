@@ -45,6 +45,19 @@ auto id_in_array = [](auto& v, auto& k) {
 
 namespace prism::tet {
 
+auto compute_quality = [](const auto& vert_attrs, const auto& tet_attrs, auto& tets) -> double {
+    auto maxqual = 0.;
+    for (auto& t : tets) {
+        auto q = tetra_quality(
+            vert_attrs[t[0]].pos,
+            vert_attrs[t[1]].pos,
+            vert_attrs[t[2]].pos,
+            vert_attrs[t[3]].pos);
+        maxqual = std::max(maxqual, q);
+    }
+    return maxqual;
+};
+
 std::tuple<
     std::vector<prism::tet::VertAttr>,
     std::vector<prism::tet::TetAttr>,
@@ -338,32 +351,21 @@ auto get_newton_position = [](const auto& vert_attrs,
                               const auto& nb,
                               int v0,
                               const Vec3d& old_pos) {
-    auto orient_preserve_tet_reorder = [](auto& conn, auto v0) {
+    auto orient_preserve_tet_reorder = [](const auto& conn, auto v0) {
         auto vl_id = id_in_array(conn, v0);
         assert(vl_id != -1);
-        switch (vl_id) { // ABCD
-        case 1: // BA-DC
-            conn = {conn[1], conn[0], conn[3], conn[2]};
-            break;
-        case 2: // (CAB)D
-            conn = {conn[2], conn[0], conn[1], conn[3]};
-            break;
-        case 3: // 3102
-            conn = {conn[3], conn[1], conn[0], conn[2]};
-            break;
-        case 0:
-        default: break;
-        }
-        return conn;
+        auto reorder = std::array<std::array<size_t, 4>, 4>{
+            {{0, 1, 2, 3}, {1, 0, 3, 2}, {2, 0, 1, 3}, {3, 1, 0, 2}}};
+        auto newconn = conn;
+        for (auto j = 0; j < 4; j++) newconn[j] = conn[reorder[vl_id][j]];
+        return newconn;
     };
     // build assembles with v0 in the front.
     std::vector<std::array<double, 12>> assembles(nb.size());
     auto iter_id = 0;
     for (auto t : nb) {
         auto& T = assembles[iter_id];
-        std::array<size_t, 4> local_verts;
-        for (auto i = 0; i < 4; i++) local_verts[i] = tet_attrs[t].conn[i];
-        local_verts = orient_preserve_tet_reorder(local_verts, v0);
+        auto local_verts = orient_preserve_tet_reorder(tet_attrs[t].conn, v0);
 
         for (auto i = 0; i < 4; i++) {
             for (auto j = 0; j < 3; j++) {
@@ -494,6 +496,10 @@ bool collapse_edge(
     auto affected = set_inter(nb1, nb2);
     assert(!affected.empty());
 
+    std::vector<Vec4i> old_tets(affected.size());
+    for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
+    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
+
     std::vector<int> old_tids = nb1;
     std::vector<Vec4i> new_tets;
     auto cnt_newtid = 0;
@@ -525,6 +531,8 @@ bool collapse_edge(
         }
     }
 
+    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
@@ -614,6 +622,9 @@ bool swap_edge(
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
     if (!bnd_faces.empty()) return false; // NOT handling boundary edges for now.
 
+    std::vector<Vec4i> old_tets(affected.size());
+    for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
+    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
     auto new_tets = [&tet_attrs, v1_id, v2_id, &affected]() {
         auto t0_id = affected[0];
         auto t1_id = affected[1];
@@ -646,6 +657,8 @@ bool swap_edge(
         return new_tets;
     }();
 
+    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
@@ -676,7 +689,9 @@ bool swap_face(
         return false;
     }
 
-
+    std::vector<Vec4i> old_tets(affected.size());
+    for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
+    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
     // no top/bottom ordering of the two tets are assumed.
     auto t0 = affected.front(), t1 = affected.back();
     auto find_other = [](const Vec4i& tet, const Vec3i& tri) {
@@ -700,6 +715,8 @@ bool swap_face(
     replace(new_tets[1], v1_id, u1);
     replace(new_tets[2], v2_id, u1);
 
+    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
