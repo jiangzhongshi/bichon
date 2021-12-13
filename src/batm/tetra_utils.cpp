@@ -45,7 +45,7 @@ auto id_in_array = [](auto& v, auto& k) {
 
 namespace prism::tet {
 
-auto compute_quality = [](const auto& vert_attrs, const auto& tet_attrs, auto& tets) -> double {
+auto compute_quality = [](const auto& vert_attrs, const auto& tets) -> double {
     auto maxqual = 0.;
     for (auto& t : tets) {
         auto q = tetra_quality(
@@ -58,27 +58,43 @@ auto compute_quality = [](const auto& vert_attrs, const auto& tet_attrs, auto& t
     return maxqual;
 };
 
+auto max_tetra_sizes = [](const auto& vert_attrs, const auto& tets) {
+    auto max_size = 0.;
+    for (auto& t : tets) {
+        auto s = circumradi2(
+            vert_attrs[t[0]].pos,
+            vert_attrs[t[1]].pos,
+            vert_attrs[t[2]].pos,
+            vert_attrs[t[3]].pos);
+        max_size = std::max(s, max_size);
+    }
+    return max_size;
+};
+
 std::tuple<
     std::vector<prism::tet::VertAttr>,
     std::vector<prism::tet::TetAttr>,
     std::vector<std::vector<int>>>
-prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t)
+prepare_tet_info(
+    const PrismCage& pc,
+    const RowMatd& tet_v,
+    const RowMati& tet_t,
+    const Eigen::VectorXi& tet_v_pid)
 {
-    auto vert_info = [&tet_v, &pc]() {
+    assert(tet_v_pid.size() == tet_v.size());
+    auto vert_info = [&tet_v, &pc, &tet_v_pid]() {
         std::vector<VertAttr> vert_attrs(tet_v.rows());
         auto nshell = pc.mid.size();
         for (auto i = 0; i < tet_v.rows(); i++) {
             vert_attrs[i].pos = tet_v.row(i);
-        }
-        for (auto i = 0; i < pc.mid.size(); i++) {
-            assert(vert_attrs[i].pos == pc.mid[i]);
-            vert_attrs[i].mid_id = i;
+            vert_attrs[i].mid_id = tet_v_pid[i];
+            assert(tet_v_pid[i] == -1 || vert_attrs[i].pos == pc.mid[tet_v_pid[i]]);
         }
         return vert_attrs;
     }();
 
     // Tet-Face (tet_t, k) -> Shell Prisms (pc.mF)
-    auto tet_info = [&tet_t, &pc]() {
+    auto tet_info = [&vert_info, &tet_t, &pc]() {
         std::vector<TetAttr> tet_attrs(tet_t.rows());
 
         std::map<std::array<int, 3>, int> cell_finder;
@@ -94,8 +110,9 @@ prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t)
                 t_a.conn[j] = tet_t(i, j);
 
                 auto face = std::array<int, 3>();
-                for (auto k = 0; k < 3; k++) face[k] = tet_t(i, (j + k + 1) % 4);
+                for (auto k = 0; k < 3; k++) face[k] = vert_info[tet_t(i, (j + k + 1) % 4)].mid_id;
                 std::sort(face.begin(), face.end());
+                if (face.front() < 0) continue; // not a boundary face.
                 auto it = cell_finder.find(face);
                 if (it != cell_finder.end()) { // found
                     t_a.prism_id[j] = it->second;
@@ -117,15 +134,16 @@ prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t)
     }();
 
     // count how many marks
-    [&tet_info, &tet_t, &pc]() {
+    auto count_marks = [&tet_info, &tet_t, &pc]() -> bool {
         auto cnt = 0;
         for (auto i = 0; i < tet_t.rows(); i++) {
             for (auto j = 0; j < 4; j++) {
                 if (tet_info[i].prism_id[j] != -1) cnt++;
             }
         }
-        assert(cnt == pc.F.size());
-    }();
+        return (cnt == pc.F.size());
+    };
+    assert(count_marks());
     return std::tuple(vert_info, tet_info, vert_tet_conn);
 };
 
@@ -258,7 +276,7 @@ bool split_edge(
     auto affected = set_inter(nb0, nb1); // removed
     assert(!affected.empty());
     spdlog::info("Splitting...");
-    
+
     std::vector<Vec4i> new_tets;
     std::vector<TetAttr> new_attrs;
     auto vx = vert_attrs.size();
@@ -277,7 +295,7 @@ bool split_edge(
 
     vert_attrs.push_back({});
     vert_attrs.back().pos = ((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2);
-    spdlog::trace("{}& {} -> {}",vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
+    spdlog::trace("{}& {} -> {}", vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
     auto rollback = [&]() {
         vert_attrs.pop_back();
         pc.top.pop_back();
@@ -386,7 +404,8 @@ bool smooth_vertex(
     std::vector<VertAttr>& vert_attrs,
     const std::vector<TetAttr>& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
-    int v0)
+    int v0,
+    double size_control)
 {
     auto& nb = vert_conn[v0];
     const Vec3d old_pos = vert_attrs[v0].pos;
@@ -441,6 +460,13 @@ bool smooth_vertex(
     };
 
     vert_attrs[v0].pos = newton_pos;
+    if (pv0 == -1) {
+        // Consider size only when internal. TODO: figure out priority of snapping vs size.
+        auto old_tets = std::vector<Vec4i>(nb.size());
+        for (auto i = 0; i < nb.size(); i++) old_tets[i] = tet_attrs[nb[i]].conn;
+        auto after_size = max_tetra_sizes(vert_attrs, old_tets);
+        if (after_size > size_control) return false;
+    }
     for (auto ti : nb) {
         auto& t = tet_attrs[ti].conn;
         if (!tetra_validity(vert_attrs, t)) {
@@ -489,7 +515,8 @@ bool collapse_edge(
     std::vector<TetAttr>& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
-    int v2_id)
+    int v2_id,
+    double size_control)
 {
     spdlog::debug("Entering {}-{}", v1_id, v2_id);
     auto& nb1 = vert_conn[v1_id];
@@ -499,7 +526,7 @@ bool collapse_edge(
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
-    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
+    auto before_quality = compute_quality(vert_attrs, old_tets);
 
     std::vector<int> old_tids = nb1;
     std::vector<Vec4i> new_tets;
@@ -532,7 +559,9 @@ bool collapse_edge(
         }
     }
 
-    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) return false;
+    auto after_quality = compute_quality(vert_attrs, new_tets);
     if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
@@ -608,7 +637,8 @@ bool swap_edge(
     std::vector<TetAttr>& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
-    int v2_id)
+    int v2_id,
+    double size_control)
 {
     // 3-2 edge to face.
     auto& nb1 = vert_conn[v1_id];
@@ -625,7 +655,7 @@ bool swap_edge(
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
-    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
+    auto before_quality = compute_quality(vert_attrs, old_tets);
     auto new_tets = [&tet_attrs, v1_id, v2_id, &affected]() {
         auto t0_id = affected[0];
         auto t1_id = affected[1];
@@ -658,7 +688,9 @@ bool swap_edge(
         return new_tets;
     }();
 
-    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) return false;
+    auto after_quality = compute_quality(vert_attrs, new_tets);
     if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
@@ -678,7 +710,8 @@ bool swap_face(
     std::vector<std::vector<int>>& vert_conn,
     int v0_id,
     int v1_id,
-    int v2_id)
+    int v2_id,
+    double size_control)
 {
     auto& nb0 = vert_conn[v0_id];
     auto& nb1 = vert_conn[v1_id];
@@ -692,7 +725,7 @@ bool swap_face(
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
-    auto before_quality = compute_quality(vert_attrs, tet_attrs, old_tets);
+    auto before_quality = compute_quality(vert_attrs, old_tets);
     // no top/bottom ordering of the two tets are assumed.
     auto t0 = affected.front(), t1 = affected.back();
     auto find_other = [](const Vec4i& tet, const Vec3i& tri) {
@@ -716,7 +749,9 @@ bool swap_face(
     replace(new_tets[1], v1_id, u1);
     replace(new_tets[2], v2_id, u1);
 
-    auto after_quality = compute_quality(vert_attrs, tet_attrs, new_tets);
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) return false;
+    auto after_quality = compute_quality(vert_attrs, new_tets);
     if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;

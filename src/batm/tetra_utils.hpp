@@ -40,7 +40,11 @@ std::tuple<
     std::vector<prism::tet::VertAttr>,
     std::vector<prism::tet::TetAttr>,
     std::vector<std::vector<int>>>
-prepare_tet_info(PrismCage& pc, RowMatd& tet_v, RowMati& tet_t);
+prepare_tet_info(
+    const PrismCage& pc,
+    const RowMatd& tet_v,
+    const RowMati& tet_t,
+    const Eigen::VectorXi& tet_v_pid);
 
 bool split_edge(
     PrismCage& pc,
@@ -57,7 +61,8 @@ bool smooth_vertex(
     std::vector<VertAttr>& vert_attrs,
     const std::vector<TetAttr>& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
-    int v0);
+    int v0,
+    double size_control);
 
 bool swap_face(
     const PrismCage& pc,
@@ -67,7 +72,8 @@ bool swap_face(
     std::vector<std::vector<int>>& vert_conn,
     int v0_id,
     int v1_id,
-    int v2_id);
+    int v2_id,
+    double size_control);
 
 bool swap_edge(
     const PrismCage& pc,
@@ -76,7 +82,8 @@ bool swap_edge(
     std::vector<TetAttr>& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
-    int v2_id);
+    int v2_id,
+    double size_control);
 
 bool collapse_edge(
     PrismCage& pc,
@@ -85,7 +92,8 @@ bool collapse_edge(
     std::vector<TetAttr>& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
-    int v2_id);
+    int v2_id,
+    double size_control);
 
 } // namespace prism::tet
 namespace prism::tet {
