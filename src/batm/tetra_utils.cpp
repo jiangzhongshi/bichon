@@ -468,7 +468,7 @@ bool smooth_vertex(
         auto old_tets = std::vector<Vec4i>(nb.size());
         for (auto i = 0; i < nb.size(); i++) old_tets[i] = tet_attrs[nb[i]].conn;
         auto after_size = max_tetra_sizes(vert_attrs, old_tets);
-        if (after_size > size_control) return false;
+        if (after_size > size_control) return rollback();
     }
     for (auto ti : nb) {
         auto& t = tet_attrs[ti].conn;
@@ -526,6 +526,9 @@ bool collapse_edge(
     auto& nb2 = vert_conn[v2_id];
     auto affected = nb1;
     assert(!set_inter(nb1, nb2).empty());
+    if (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id == -1) {
+        return false; //TODO: erase v1, and assign its prism tracker to v2.
+    }
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
@@ -626,7 +629,6 @@ bool collapse_edge(
 
         update_pc(pc, new_fid, moved_tris, new_tracks);
     }
-
     // vert_attrs[v1_id].removed = true;
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
 

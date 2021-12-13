@@ -391,7 +391,7 @@ TEST_CASE("reload-swap")
         return edge_queue;
     };
 
-    {
+    if (true){
         auto edge_queue = construct_collapse_queue(vert_info, tet_info);
         spdlog::info("edge queue size {}", edge_queue.size());
         while (!edge_queue.empty()) {
@@ -407,8 +407,20 @@ TEST_CASE("reload-swap")
         }
         spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
     }
-    for (auto t : tet_info) {
-        if (!t.is_removed) CHECK(prism::tet::tetra_validity(vert_info, t.conn));
-    }
     serializer("../buildr/debug1.h5", pc, vert_info, tet_info);
+    std::vector<bool> snap_flag(pc.mid.size(),false);
+    {
+        for (auto v0=0; v0<vert_info.size(); v0 ++) {
+            auto & nb = vert_tet_conn[v0];
+            if (nb.empty()) continue;
+            auto flag = prism::tet::smooth_vertex(pc, option, vert_info, tet_info, vert_tet_conn, v0, sizing);
+            if (vert_info[v0].mid_id != -1) {
+                if (flag) snap_flag[vert_info[v0].mid_id] = true;
+            }
+        }
+    }
+    auto cnt_snap = 0;
+    for (auto f:snap_flag) {if (f) cnt_snap ++;}
+    spdlog::info("Snapped {} / {}", cnt_snap, snap_flag.size());
+    serializer("../buildr/debug2.h5", pc, vert_info, tet_info);
 }
