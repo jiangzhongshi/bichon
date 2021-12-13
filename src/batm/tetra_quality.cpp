@@ -7,6 +7,7 @@
 #include <geogram/numerics/predicates.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+#include <Eigen/Core>
 #include <Eigen/Dense>
 
 namespace prism::tet {
@@ -70,7 +71,7 @@ Vec3d get_newton_position_from_assemble(
             total_hess += hess;
             assert(!std::isnan(total_energy));
         }
-        Vec3d x = total_hess.ldlt().solve(total_jac);
+        Eigen::Vector3d x = total_hess.ldlt().solve(total_jac);
         spdlog::trace("energy {}", total_energy);
         if (total_jac.isApprox(total_hess * x)) // a hacky PSD trick. TODO: change this.
             return -x;

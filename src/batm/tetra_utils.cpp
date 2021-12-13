@@ -258,7 +258,7 @@ bool split_edge(
     auto affected = set_inter(nb0, nb1); // removed
     assert(!affected.empty());
     spdlog::info("Splitting...");
-
+    
     std::vector<Vec4i> new_tets;
     std::vector<TetAttr> new_attrs;
     auto vx = vert_attrs.size();
@@ -277,6 +277,7 @@ bool split_edge(
 
     vert_attrs.push_back({});
     vert_attrs.back().pos = ((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2);
+    spdlog::trace("{}& {} -> {}",vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
     auto rollback = [&]() {
         vert_attrs.pop_back();
         pc.top.pop_back();
