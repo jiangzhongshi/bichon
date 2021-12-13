@@ -81,14 +81,17 @@ prepare_tet_info(
     const RowMati& tet_t,
     const Eigen::VectorXi& tet_v_pid)
 {
-    assert(tet_v_pid.size() == tet_v.size());
+    assert(tet_v_pid.size() == tet_v.rows());
     auto vert_info = [&tet_v, &pc, &tet_v_pid]() {
         std::vector<VertAttr> vert_attrs(tet_v.rows());
         auto nshell = pc.mid.size();
         for (auto i = 0; i < tet_v.rows(); i++) {
             vert_attrs[i].pos = tet_v.row(i);
             vert_attrs[i].mid_id = tet_v_pid[i];
-            assert(tet_v_pid[i] == -1 || vert_attrs[i].pos == pc.mid[tet_v_pid[i]]);
+            if (tet_v_pid[i] != -1){
+                // spdlog::info("{}=={}: {}", vert_attrs[i].pos, pc.mid[tet_v_pid[i]], tet_v_pid[i]);
+            assert(vert_attrs[i].pos == pc.mid[tet_v_pid[i]]);
+            }
         }
         return vert_attrs;
     }();
@@ -562,7 +565,7 @@ bool collapse_edge(
     auto after_size = max_tetra_sizes(vert_attrs, new_tets);
     if (after_size > size_control) return false;
     auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (before_quality > after_quality) return false;
+    if (before_quality < after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
@@ -691,7 +694,7 @@ bool swap_edge(
     auto after_size = max_tetra_sizes(vert_attrs, new_tets);
     if (after_size > size_control) return false;
     auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (before_quality > after_quality) return false;
+    if (before_quality < after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
@@ -749,13 +752,16 @@ bool swap_face(
     replace(new_tets[1], v1_id, u1);
     replace(new_tets[2], v2_id, u1);
 
-    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
-    if (after_size > size_control) return false;
-    auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (before_quality > after_quality) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
+
+    auto after_quality = compute_quality(vert_attrs, new_tets);
+    if (before_quality < after_quality) return false;
+
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) return false;
+    
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
     return true;
