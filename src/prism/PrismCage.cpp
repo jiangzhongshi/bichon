@@ -25,6 +25,7 @@
 #include "feature_utils.hpp"
 #include "geogram/AABB.hpp"
 #include "prism/cage_check.hpp"
+#include "prism/common.hpp"
 #include "spatial-hash/AABB_hash.hpp"
 
 auto counterclockwise_reorder = [](const auto &F, const auto &VF,
@@ -272,7 +273,7 @@ PrismCage::PrismCage(const RowMatd &vert, const RowMati &face,
   }
 }
 
-auto serialize_meta_edges = [](auto &meta_edges) {
+auto serialize_meta_edges = [](const auto &meta_edges) {
   std::vector<int> flat, ind;
   for (auto [m, data] : meta_edges) {
     ind.push_back(flat.size());
@@ -283,7 +284,9 @@ auto serialize_meta_edges = [](auto &meta_edges) {
     flat.insert(flat.end(), seg.begin(), seg.end());
   }
   ind.push_back(flat.size());
-  return std::tuple(flat, ind);
+  Eigen::VectorXi mFlat = Eigen::Map<Eigen::VectorXi>(&flat[0], flat.size());
+  Eigen::VectorXi mInd = Eigen::Map<Eigen::VectorXi>(&ind[0], ind.size());
+  return std::tuple(mFlat, mInd);
 };
 
 auto deserialize_meta_edges = [](auto &flat, auto &ind) {
@@ -334,7 +337,7 @@ void PrismCage::serialize(std::string filename, std::any additionals) const {
   H5Easy::dump(file, "track_flat", track_flat);
   H5Easy::dump(file, "track_size", track_sizes);
   auto [meta_edges_flat, meta_edges_ind] = serialize_meta_edges(meta_edges);
-  H5Easy::dump(file, "meta_edges_flat", meta_edges_flat);
+  H5Easy::dump(file, "meta_edges_flat", meta_edges_flat); // somehow, vector<int> triggers UB related to const.
   H5Easy::dump(file, "meta_edges_ind", meta_edges_ind);
 
   SeparateType st =
