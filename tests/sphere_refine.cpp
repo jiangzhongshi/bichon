@@ -79,6 +79,7 @@ auto construct_edge_queue = [](const auto& vert_info, const auto& tet_info) {
         std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
     auto edge_set = std::set<std::tuple<int, int>>();
     for (auto tet : tet_info) {
+        if (tet.is_removed) continue;
         for (auto e : local_edges) {
             auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
             if (v0 > v1) continue;
@@ -100,6 +101,7 @@ auto construct_face_queue = [](const auto& vert_info, const auto& tet_info) {
     auto face_queue = std::priority_queue<std::tuple<double, int, int, int>>();
     auto face_set = std::set<std::array<int, 3>>();
     for (auto tet : tet_info) {
+        if (tet.is_removed) continue;
         for (auto e : local_faces) {
             auto tri = std::array<int, 3>{tet.conn[e[0]], tet.conn[e[1]], tet.conn[e[2]]};
             std::sort(tri.begin(), tri.end());
@@ -346,24 +348,62 @@ TEST_CASE("reload-swap")
     auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
-    {
+    double sizing = 1e-2;
+    if (true) {
         auto face_queue = construct_face_queue(vert_info, tet_info);
         spdlog::info("face queue size {}", face_queue.size());
         spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
         while (!face_queue.empty()) {
             auto [len, v0, v1, v2] = face_queue.top();
             face_queue.pop();
-            prism::tet::swap_face(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, v2, 2e-2);
+            prism::tet::swap_face(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, v2, sizing);
         }
         spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
     }
-    {
+    if (true) {
         auto edge_queue = construct_edge_queue(vert_info, tet_info);
         spdlog::info("edge queue size {}", edge_queue.size());
         while (!edge_queue.empty()) {
             auto [len, v0, v1] = edge_queue.top();
             edge_queue.pop();
-            prism::tet::swap_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, 2e-2);
+            prism::tet::swap_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
+        }
+        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    }
+
+    auto construct_collapse_queue = [](const auto& vert_info, const auto& tet_info) {
+        auto local_edges =
+            std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+        auto edge_set = std::set<std::tuple<int, int>>();
+        for (auto tet : tet_info) {
+            if (tet.is_removed) continue;
+            for (auto e : local_edges) {
+                auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
+                if (v0 > v1) continue;
+                edge_set.emplace(v0, v1);
+            }
+        }
+        auto edge_queue = std::priority_queue<std::tuple<double, int, int>>(); // max queue, but we want smaller first.
+        for (auto [v0, v1] : edge_set) {
+            auto len = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
+            edge_queue.emplace(-len, v0, v1);
+        }
+        return edge_queue;
+    };
+
+    {
+        auto edge_queue = construct_collapse_queue(vert_info, tet_info);
+        spdlog::info("edge queue size {}", edge_queue.size());
+        while (!edge_queue.empty()) {
+            auto [len, v0, v1] = edge_queue.top();
+            edge_queue.pop();
+            {
+                auto& nb1 = vert_tet_conn[v0];
+                auto& nb2 = vert_tet_conn[v1];
+                auto affected = set_inter(nb1, nb2);
+                if (affected.empty()) continue;
+            }
+            prism::tet::collapse_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
         }
         spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
     }

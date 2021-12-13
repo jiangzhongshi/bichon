@@ -521,11 +521,11 @@ bool collapse_edge(
     int v2_id,
     double size_control)
 {
-    spdlog::debug("Entering {}-{}", v1_id, v2_id);
+    spdlog::debug("Entering {}-{}", v1_id, v2_id); // erasing v1_id
     auto& nb1 = vert_conn[v1_id];
     auto& nb2 = vert_conn[v2_id];
-    auto affected = set_inter(nb1, nb2);
-    assert(!affected.empty());
+    auto affected = nb1;
+    assert(!set_inter(nb1, nb2).empty());
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
@@ -562,10 +562,10 @@ bool collapse_edge(
         }
     }
 
-    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
-    if (after_size > size_control) return false;
     auto after_quality = compute_quality(vert_attrs, new_tets);
     if (before_quality < after_quality) return false;
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
