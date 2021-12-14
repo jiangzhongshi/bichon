@@ -7,11 +7,13 @@
 #include <spdlog/spdlog.h>
 #include <Eigen/Dense>
 #include <algorithm>
+#include <cassert>
 #include <limits>
 #include <prism/PrismCage.hpp>
 #include <prism/geogram/AABB.hpp>
 #include <prism/local_operations/remesh_pass.hpp>
 #include <prism/local_operations/validity_checks.hpp>
+#include <prism/spatial-hash/AABB_hash.hpp>
 #include <vector>
 #include "prism/cgal/triangle_triangle_intersection.hpp"
 auto set_inter = [](auto& A, auto& B) {
@@ -88,9 +90,8 @@ prepare_tet_info(
         for (auto i = 0; i < tet_v.rows(); i++) {
             vert_attrs[i].pos = tet_v.row(i);
             vert_attrs[i].mid_id = tet_v_pid[i];
-            if (tet_v_pid[i] != -1){
-                // spdlog::info("{}=={}: {}", vert_attrs[i].pos, pc.mid[tet_v_pid[i]], tet_v_pid[i]);
-            assert(vert_attrs[i].pos == pc.mid[tet_v_pid[i]]);
+            if (tet_v_pid[i] != -1) {
+                assert(vert_attrs[i].pos == pc.mid[tet_v_pid[i]]);
             }
         }
         return vert_attrs;
@@ -106,7 +107,6 @@ prepare_tet_info(
             std::sort(pri.begin(), pri.end());
             cell_finder.emplace(pri, i);
         }
-        // RowMati marker = RowMati::Constant(tet_t.rows(), 4, -1);
         for (auto i = 0; i < tet_t.rows(); i++) {
             auto& t_a = tet_attrs[i];
             for (auto j = 0; j < 4; j++) {
@@ -137,25 +137,38 @@ prepare_tet_info(
     }();
 
     // count how many marks
-    auto count_marks = [&tet_info, &tet_t, &pc]() -> bool {
+    auto count_marks = [&tet_info]() {
         auto cnt = 0;
-        for (auto i = 0; i < tet_t.rows(); i++) {
+        for (auto i = 0; i < tet_info.size(); i++) {
             for (auto j = 0; j < 4; j++) {
                 if (tet_info[i].prism_id[j] != -1) cnt++;
             }
         }
-        return (cnt == pc.F.size());
+        return cnt;
     };
-    assert(count_marks());
+    assert(count_marks() == pc.F.size());
     return std::tuple(vert_info, tet_info, vert_tet_conn);
 };
 
-auto update_pc(
+/**
+ * @brief
+ *
+ * @param pc
+ * @param old_fid fill with -1
+ * @param new_fid new prism id
+ * @param new_conn
+ * @param new_tracks
+ */
+void update_pc(
     PrismCage& pc,
-    std::vector<int>& new_fid,
+    const std::vector<int>& old_fid,
+    const std::vector<int>& new_fid,
     std::vector<Vec3i>& new_conn,
     const std::vector<std::set<int>>& new_tracks)
 {
+    assert(new_fid.size() == new_conn.size());
+    assert(new_fid.size() == new_tracks.size());
+    for (auto i : old_fid) pc.F[i].fill(-1);
     prism::local_validity::triangle_shifts(new_conn);
     for (auto i = 0; i < new_fid.size(); i++) {
         auto f = new_fid[i];
@@ -166,9 +179,24 @@ auto update_pc(
         pc.F[f] = new_conn[i];
         pc.track_ref[f] = new_tracks[i];
     }
+
+    if (pc.top_grid != nullptr) {
+        spdlog::trace("HashGrid Update");
+        for (auto f : old_fid) {
+            pc.top_grid->remove_element(f);
+            pc.base_grid->remove_element(f);
+        }
+        pc.top_grid->insert_triangles(pc.top, pc.F, new_fid);
+        pc.base_grid->insert_triangles(pc.base, pc.F, new_fid);
+    }
 }
 
-auto edge_adjacent_boundary_face = [](auto& tet_attrs, auto& vert_conn, int v0, int v1) {
+std::vector<int> edge_adjacent_boundary_face(
+    const std::vector<TetAttr>& tet_attrs,
+    const std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1)
+{
     auto& nb0 = vert_conn[v0];
     auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
@@ -196,7 +224,6 @@ void update_tetra_conn(
     const std::vector<Vec3i>& modified_tris)
 {
     // update connectivity: VT
-    auto n_tet = tet_attrs.size();
     vert_conn.resize(vert_attrs.size());
 
     // resetting prism_id.
@@ -219,12 +246,21 @@ void update_tetra_conn(
     for (auto i = 0; i < modified_pids.size(); i++) {
         auto t = modified_tris[i];
         std::sort(t.begin(), t.end());
+        assert(moved_pris_assigner.find(t) == moved_pris_assigner.end());
         moved_pris_assigner.emplace(t, modified_pids[i]);
     }
     spdlog::trace("sorted moved tris number {}", moved_pris_assigner);
 
     auto cnt_assigned_prisms = 0;
-    for (auto t : new_tets) {
+    auto check_conn = [&tet_attrs](auto& arr) -> bool {
+        for (auto i : arr) {
+            if (tet_attrs[i].is_removed) return false;
+        }
+        return true;
+    };
+
+    auto n_tet = tet_attrs.size();
+    for (auto& t : new_tets) {
         for (auto i = 0; i < t.size(); i++) {
             auto diff = std::vector<int>();
             set_minus(vert_conn[t[i]], affected, diff);
@@ -356,7 +392,7 @@ bool split_edge(
 
         // distribute and assign new_tracks.
         new_fid = {f0, f1, int(F.size()), int(F.size() + 1)};
-        update_pc(pc, new_fid, moved_tris, new_tracks);
+        update_pc(pc, {f0, f1}, new_fid, moved_tris, new_tracks);
     }
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
@@ -400,6 +436,27 @@ auto get_newton_position = [](const auto& vert_attrs,
     return newton_direction_from_stack(assembles);
 };
 
+Vec3d get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
+{
+    auto query = [&ref = pc.ref](const Vec3d& s, const Vec3d& t, const std::set<int>& total_trackee)
+        -> std::optional<Vec3d> {
+        std::array<Vec3d, 2> seg_query{s, t};
+        for (auto f : total_trackee) {
+            auto v0 = ref.F(f, 0), v1 = ref.F(f, 1), v2 = ref.F(f, 2);
+            auto mid_intersect = prism::cgal::segment_triangle_intersection(
+                seg_query,
+                {ref.V.row(v0), ref.V.row(v1), ref.V.row(v2)});
+            if (mid_intersect) return mid_intersect;
+        }
+        return {};
+    };
+    std::set<int> total_trackee;
+    for (auto f : neighbor_pris)
+        total_trackee.insert(pc.track_ref[f].begin(), pc.track_ref[f].end());
+    auto mid_intersect = query(pc.top[v0], pc.base[v0], total_trackee);
+    assert(mid_intersect && "Snap project should succeed.");
+    return mid_intersect.value();
+}
 
 bool smooth_vertex(
     PrismCage& pc,
@@ -422,35 +479,14 @@ bool smooth_vertex(
             }
         }
     }
-    auto get_snap_position = [&pc, &neighbor_pris, v0 = pv0]() {
-        auto query = [&ref = pc.ref](
-                         const Vec3d& s,
-                         const Vec3d& t,
-                         const std::set<int>& total_trackee) -> std::optional<Vec3d> {
-            std::array<Vec3d, 2> seg_query{s, t};
-            for (auto f : total_trackee) {
-                auto v0 = ref.F(f, 0), v1 = ref.F(f, 1), v2 = ref.F(f, 2);
-                auto mid_intersect = prism::cgal::segment_triangle_intersection(
-                    seg_query,
-                    {ref.V.row(v0), ref.V.row(v1), ref.V.row(v2)});
-                if (mid_intersect) return mid_intersect;
-            }
-            return {};
-        };
-        std::set<int> total_trackee;
-        for (auto f : neighbor_pris)
-            total_trackee.insert(pc.track_ref[f].begin(), pc.track_ref[f].end());
-        auto mid_intersect = query(pc.top[v0], pc.base[v0], total_trackee);
-        assert(mid_intersect && "Snap project should succeed.");
-        return mid_intersect.value();
-    };
+
 
     Vec3d newton_pos = Vec3d::Zero();
     Vec3d old_mid = Vec3d::Zero();
 
     if (pv0 != -1) { // internal
         assert(!neighbor_pris.empty());
-        newton_pos = get_snap_position();
+        newton_pos = get_snap_position(pc, neighbor_pris, pv0);
         old_mid = pc.mid[pv0];
     } else {
         newton_pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
@@ -503,7 +539,7 @@ bool smooth_vertex(
             new_tracks,
             local_cp);
         if (flag != 0) return rollback();
-        update_pc(pc, old_fids, moved_tris, new_tracks);
+        update_pc(pc, old_fids, old_fids, moved_tris, new_tracks);
     }
 
     spdlog::trace("Vertex Snapped!!");
@@ -527,7 +563,7 @@ bool collapse_edge(
     auto affected = nb1;
     assert(!set_inter(nb1, nb2).empty());
     if (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id == -1) {
-        return false; //TODO: erase v1, and assign its prism tracker to v2.
+        return false; // TODO: erase v1, and assign its prism tracker to v2.
     }
 
     std::vector<Vec4i> old_tets(affected.size());
@@ -566,35 +602,39 @@ bool collapse_edge(
     }
 
     auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (before_quality < after_quality) return false;
+    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality)
+        return false;
     auto after_size = max_tetra_sizes(vert_attrs, new_tets);
     if (after_size > size_control) return false;
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
+    for (auto f : bnd_faces) {
+        assert(pc.F[f][0] != -1);
+    }
     auto old_fid = std::vector<int>();
     auto new_fid = std::vector<int>();
     auto moved_tris = std::vector<Vec3i>();
-    if (!bnd_faces.empty()) {
-        auto get_nb = [&vert_conn, &tet_attrs](auto v_id) {
-            auto nb = std::vector<int>();
-            for (auto t : vert_conn[v_id]) {
-                for (auto j = 0; j < 4; j++) {
-                    auto pid = tet_attrs[t].prism_id[j];
-                    if (tet_attrs[t].conn[j] != v_id && pid != -1) {
-                        // a surface adjacent to v1.
-                        nb.push_back(pid);
-                    }
+    auto nb_pids = [&vert_conn, &tet_attrs](auto v_id) {
+        auto nb = std::vector<int>();
+        for (auto t : vert_conn[v_id]) {
+            assert(tet_attrs[t].is_removed == false);
+            for (auto j = 0; j < 4; j++) {
+                auto pid = tet_attrs[t].prism_id[j];
+                if (tet_attrs[t].conn[j] != v_id && pid != -1) {
+                    // a surface adjacent to v1.
+                    nb.push_back(pid);
                 }
             }
-            std::sort(nb.begin(), nb.end());
-            return nb;
-        };
+        }
+        std::sort(nb.begin(), nb.end());
+        return nb;
+    };
 
-
-        std::tie(old_fid, new_fid, moved_tris) = [neighbor0 = get_nb(v1_id),
-                                                  neighbor1 = get_nb(v2_id),
+    if (!bnd_faces.empty()) {
+        std::tie(old_fid, new_fid, moved_tris) = [neighbor0 = nb_pids(v1_id),
+                                                  neighbor1 = nb_pids(v2_id),
                                                   &F = pc.F,
                                                   &u1 = vert_attrs[v2_id].mid_id,
                                                   &u0 = vert_attrs[v1_id].mid_id]() {
@@ -604,6 +644,7 @@ bool collapse_edge(
             std::vector<int> new_fid, old_fid;
             for (auto f : neighbor0) {
                 auto new_tris = F[f];
+                assert(new_tris[0] != -1);
                 old_fid.push_back(f);
                 if (id_in_array(new_tris, u1) != -1) continue; // collapsed faces
                 replace(new_tris, u0, u1);
@@ -627,7 +668,7 @@ bool collapse_edge(
             local_cp);
         if (flag != 0) return rollback();
 
-        update_pc(pc, new_fid, moved_tris, new_tracks);
+        update_pc(pc, old_fid, new_fid, moved_tris, new_tracks);
     }
     // vert_attrs[v1_id].removed = true;
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
@@ -763,7 +804,7 @@ bool swap_face(
 
     auto after_size = max_tetra_sizes(vert_attrs, new_tets);
     if (after_size > size_control) return false;
-    
+
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
     return true;
