@@ -100,7 +100,6 @@ namespace prism::tet {
 double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);
 double tetra_quality(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
-Vec3d get_newton_position_from_assemble(
-    std::vector<std::array<double, 12>>& assembles,
-    const Vec3d& old_pos);
+Vec3d newton_direction_from_stack(
+    std::vector<std::array<double, 12>>& assembles);
 } // namespace prism::tet

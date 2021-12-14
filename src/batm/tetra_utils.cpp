@@ -397,7 +397,7 @@ auto get_newton_position = [](const auto& vert_attrs,
         iter_id++;
     }
 
-    return get_newton_position_from_assemble(assembles, old_pos);
+    return newton_direction_from_stack(assembles);
 };
 
 

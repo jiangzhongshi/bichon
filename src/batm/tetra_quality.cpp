@@ -45,10 +45,11 @@ bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
 }
 
 
-Vec3d get_newton_position_from_assemble(
-    std::vector<std::array<double, 12>>& assembles,
-    const Vec3d& old_pos)
+Vec3d newton_direction_from_stack(std::vector<std::array<double, 12>>& assembles)
 {
+    assert(!assembles.empty());
+    auto& T = assembles.front();
+    Vec3d old_pos(T[0], T[1], T[2]);
     auto newton_direction = [&assembles](auto& pos) -> Vec3d {
         auto total_energy = 0.;
         Eigen::Vector3d total_jac = Eigen::Vector3d::Zero();
