@@ -113,7 +113,7 @@ int smooth_single(PrismCage &pc, int vid,
   auto query = [&ref = pc.ref](
                    const Vec3d &s, const Vec3d &t,
                    const std::set<int> &total_trackee) -> std::optional<Vec3d> {
-    if (ref.aabb->enabled)  // this can be discarded if no performance benefit
+    if (ref.aabb->enabled)  // TODO: this can be discarded if no performance benefit
                             // is found.
       return ref.aabb->segment_query(s, t);
     std::array<Vec3d, 2> seg_query{s, t};
