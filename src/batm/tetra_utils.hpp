@@ -1,3 +1,5 @@
+#pragma once
+
 #include <prism/common.hpp>
 #include "prism/local_operations/section_remesh.hpp"
 
