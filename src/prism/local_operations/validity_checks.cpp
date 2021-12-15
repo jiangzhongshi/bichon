@@ -173,14 +173,10 @@ bool volume_check(const std::vector<Vec3d> &base, const std::vector<Vec3d> &mid,
     //   return true;
     // };
     std::array<bool, 3> cons_flag{v0 < num_cons, v1 < num_cons, v2 < num_cons};
-    spdlog::trace("VC: BM \n{} {} {} {} {} {}", 
-    base[v0], base[v1], base[v2],
-    mid[v0], mid[v1], mid[v2]);
 
     if (!checker({base[v0], base[v1], base[v2], mid[v0], mid[v1], mid[v2]},
                  cons_flag))
       return false;
-    spdlog::trace("VC: MT");
     if (!checker({mid[v0], mid[v1], mid[v2], top[v0], top[v1], top[v2]},
                  cons_flag))
       return false;
