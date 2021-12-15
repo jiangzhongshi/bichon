@@ -45,33 +45,53 @@ auto reload = [](std::string filename, auto& pc) {
     return prism::tet::prepare_tet_info(pc, tet_v, tet_t, tet_v_pid);
 };
 
-TEST_CASE("amr-sphere-prepare")
-{
-    using namespace prism::tet;
-    std::string filename = "../tests/data/sphere_40.obj.h5";
-    PrismCage pc(filename);
-    spdlog::info("Shell size v{}, f{}", pc.base.size(), pc.F.size());
-    auto [vert_info, tet_info, vert_tet_conn] = prepare(pc);
 
+auto set_inter = [](auto& A, auto& B) {
+    std::vector<int> vec;
+    std::set_intersection(A.begin(), A.end(), B.begin(), B.end(), std::back_inserter(vec));
+    return vec;
+};
 
-    spdlog::set_level(spdlog::level::trace);
+auto convert_to_VT = [](auto& vert_info, auto& tet_info) {
+    RowMatd V(vert_info.size(), 3);
+    RowMati T(tet_info.size(), 4);
+    Eigen::VectorXi V_pid(V.rows());
+    for (auto i = 0; i < vert_info.size(); i++) {
+        V.row(i) = vert_info[i].pos;
+        V_pid[i] = vert_info[i].mid_id;
+    }
+    auto actual_tets = 0;
+    for (auto& t : tet_info) {
+        if (t.is_removed) continue;
+        auto& tet = t.conn;
+        T.row(actual_tets) << tet[0], tet[1], tet[2], tet[3];
+        actual_tets++;
+    }
+    T.conservativeResize(actual_tets, 4);
+    return std::tuple(V, T, V_pid);
+};
 
+auto construct_collapse_queue = [](const auto& vert_info, const auto& tet_info) {
+    auto local_edges =
+        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+    auto edge_set = std::set<std::tuple<int, int>>();
+    for (auto tet : tet_info) {
+        if (tet.is_removed) continue;
+        for (auto e : local_edges) {
+            auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
+            if (v0 > v1) continue;
+            edge_set.emplace(v0, v1);
+        }
+    }
+    auto edge_queue = std::priority_queue<std::tuple<double, int, int>>(); // max queue, but we want
+                                                                           // smaller first.
+    for (auto [v0, v1] : edge_set) {
+        auto len = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
+        edge_queue.emplace(-len, v0, v1);
+    }
+    return edge_queue;
+};
 
-    prism::local::RemeshOptions option(pc.mid.size(), 0.1);
-    auto check_sorted = [&vert_tet_conn = vert_tet_conn]() -> bool {
-        for (auto& arr : vert_tet_conn)
-            for (auto i = 0; i < arr.size() - 1; i++)
-                if (arr[i] > arr[i + 1]) return false;
-        return true;
-    };
-    assert(check_sorted());
-    split_edge(pc, option, vert_info, tet_info, vert_tet_conn, 0, 1);
-    spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    assert(check_sorted());
-    assert(check_sorted());
-    // smooth_vertex(pc, option, vert_info, tet_info, vert_tet_conn, 46);
-    // spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-}
 
 // iterate all edges
 auto construct_edge_queue = [](const auto& vert_info, const auto& tet_info) {
@@ -114,6 +134,83 @@ auto construct_face_queue = [](const auto& vert_info, const auto& tet_info) {
     return face_queue;
 };
 
+auto faceswap_pass = [](auto& pc,
+                        auto& option,
+                        auto& vert_info,
+                        auto& tet_info,
+                        auto& vert_tet_conn,
+                        auto sizing) {
+    auto face_queue = construct_face_queue(vert_info, tet_info);
+    spdlog::info("face queue size {}", face_queue.size());
+    spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    while (!face_queue.empty()) {
+        auto [len, v0, v1, v2] = face_queue.top();
+        face_queue.pop();
+        prism::tet::swap_face(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, v2, sizing);
+    }
+    spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+};
+auto edgeswap_pass =
+    [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
+        auto edge_queue = construct_edge_queue(vert_info, tet_info);
+        spdlog::info("edge queue size {}", edge_queue.size());
+        while (!edge_queue.empty()) {
+            auto [len, v0, v1] = edge_queue.top();
+            edge_queue.pop();
+            prism::tet::swap_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
+        }
+        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    };
+auto collapse_pass = [](auto& pc,
+                        auto& option,
+                        auto& vert_info,
+                        auto& tet_info,
+                        auto& vert_tet_conn,
+                        auto sizing) {
+    auto edge_queue = construct_collapse_queue(vert_info, tet_info);
+    spdlog::info("edge queue size {}", edge_queue.size());
+    while (!edge_queue.empty()) {
+        auto [len, v0, v1] = edge_queue.top();
+        edge_queue.pop();
+        {
+            auto& nb1 = vert_tet_conn[v0];
+            auto& nb2 = vert_tet_conn[v1];
+            auto affected = set_inter(nb1, nb2);
+            if (affected.empty()) continue;
+        }
+        prism::tet::collapse_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
+    }
+    spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+};
+
+
+TEST_CASE("amr-sphere-prepare")
+{
+    using namespace prism::tet;
+    std::string filename = "../tests/data/sphere_40.obj.h5";
+    PrismCage pc(filename);
+    spdlog::info("Shell size v{}, f{}", pc.base.size(), pc.F.size());
+    auto [vert_info, tet_info, vert_tet_conn] = prepare(pc);
+
+
+    spdlog::set_level(spdlog::level::trace);
+
+
+    prism::local::RemeshOptions option(pc.mid.size(), 0.1);
+    auto check_sorted = [&vert_tet_conn = vert_tet_conn]() -> bool {
+        for (auto& arr : vert_tet_conn)
+            for (auto i = 0; i < arr.size() - 1; i++)
+                if (arr[i] > arr[i + 1]) return false;
+        return true;
+    };
+    assert(check_sorted());
+    split_edge(pc, option, vert_info, tet_info, vert_tet_conn, 0, 1);
+    spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    assert(check_sorted());
+    assert(check_sorted());
+    // smooth_vertex(pc, option, vert_info, tet_info, vert_tet_conn, 46);
+    // spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+}
 
 TEST_CASE("sphere-tet-swap")
 {
@@ -141,30 +238,6 @@ TEST_CASE("sphere-tet-swap")
     }
 }
 
-auto set_inter = [](auto& A, auto& B) {
-    std::vector<int> vec;
-    std::set_intersection(A.begin(), A.end(), B.begin(), B.end(), std::back_inserter(vec));
-    return vec;
-};
-
-auto convert_to_VT = [](auto& vert_info, auto& tet_info) {
-    RowMatd V(vert_info.size(), 3);
-    RowMati T(tet_info.size(), 4);
-    Eigen::VectorXi V_pid(V.rows());
-    for (auto i = 0; i < vert_info.size(); i++) {
-        V.row(i) = vert_info[i].pos;
-        V_pid[i] = vert_info[i].mid_id;
-    }
-    auto actual_tets = 0;
-    for (auto& t : tet_info) {
-        if (t.is_removed) continue;
-        auto& tet = t.conn;
-        T.row(actual_tets) << tet[0], tet[1], tet[2], tet[3];
-        actual_tets++;
-    }
-    T.conservativeResize(actual_tets, 4);
-    return std::tuple(V, T, V_pid);
-};
 
 auto serializer = [](std::string filename, auto& pc, auto& vert_info, auto& tet_info) {
     pc.serialize(
@@ -196,27 +269,6 @@ auto serializer = [](std::string filename, auto& pc, auto& vert_info, auto& tet_
                 H5Easy::dump(file, "tet_size", S);
                 H5Easy::dump(file, "tet_qual", Q);
             }));
-};
-
-auto construct_collapse_queue = [](const auto& vert_info, const auto& tet_info) {
-    auto local_edges =
-        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
-    auto edge_set = std::set<std::tuple<int, int>>();
-    for (auto tet : tet_info) {
-        if (tet.is_removed) continue;
-        for (auto e : local_edges) {
-            auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-            if (v0 > v1) continue;
-            edge_set.emplace(v0, v1);
-        }
-    }
-    auto edge_queue = std::priority_queue<std::tuple<double, int, int>>(); // max queue, but we want
-                                                                           // smaller first.
-    for (auto [v0, v1] : edge_set) {
-        auto len = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
-        edge_queue.emplace(-len, v0, v1);
-    }
-    return edge_queue;
 };
 
 
@@ -363,6 +415,32 @@ TEST_CASE("split-pass")
     serializer("debug0.h5", pc, vert_info, tet_info);
 }
 
+auto vertexsmooth_pass =
+    [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
+        std::vector<bool> snap_flag(pc.mid.size(), false);
+        {
+            for (auto v0 = 0; v0 < vert_info.size(); v0++) {
+                auto& nb = vert_tet_conn[v0];
+                if (nb.empty()) continue;
+                auto flag = prism::tet::smooth_vertex(
+                    pc,
+                    option,
+                    vert_info,
+                    tet_info,
+                    vert_tet_conn,
+                    v0,
+                    sizing);
+                if (vert_info[v0].mid_id != -1) {
+                    if (flag) snap_flag[vert_info[v0].mid_id] = true;
+                }
+            }
+        }
+        auto cnt_snap = 0;
+        for (auto f : snap_flag) {
+            if (f) cnt_snap++;
+        }
+        spdlog::info("Snapped {} / {}", cnt_snap, snap_flag.size());
+    };
 TEST_CASE("reload-swap")
 {
     std::string filename = "../buildr/debug0.h5";
@@ -371,113 +449,15 @@ TEST_CASE("reload-swap")
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
     double sizing = 1e-2;
-    if (true) {
-        auto face_queue = construct_face_queue(vert_info, tet_info);
-        spdlog::info("face queue size {}", face_queue.size());
-        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-        while (!face_queue.empty()) {
-            auto [len, v0, v1, v2] = face_queue.top();
-            face_queue.pop();
-            prism::tet::swap_face(
-                pc,
-                option,
-                vert_info,
-                tet_info,
-                vert_tet_conn,
-                v0,
-                v1,
-                v2,
-                sizing);
-        }
-        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    }
-    if (true) {
-        auto edge_queue = construct_edge_queue(vert_info, tet_info);
-        spdlog::info("edge queue size {}", edge_queue.size());
-        while (!edge_queue.empty()) {
-            auto [len, v0, v1] = edge_queue.top();
-            edge_queue.pop();
-            prism::tet::swap_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
-        }
-        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    }
+    if (true) faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    if (true) edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    if (true) collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
 
-
-    if (true) {
-        auto edge_queue = construct_collapse_queue(vert_info, tet_info);
-        spdlog::info("edge queue size {}", edge_queue.size());
-        while (!edge_queue.empty()) {
-            auto [len, v0, v1] = edge_queue.top();
-            edge_queue.pop();
-            {
-                auto& nb1 = vert_tet_conn[v0];
-                auto& nb2 = vert_tet_conn[v1];
-                auto affected = set_inter(nb1, nb2);
-                if (affected.empty()) continue;
-            }
-            prism::tet::collapse_edge(
-                pc,
-                option,
-                vert_info,
-                tet_info,
-                vert_tet_conn,
-                v0,
-                v1,
-                sizing);
-        }
-        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    }
     serializer("../buildr/debug1.h5", pc, vert_info, tet_info);
-    std::vector<bool> snap_flag(pc.mid.size(), false);
-    {
-        for (auto v0 = 0; v0 < vert_info.size(); v0++) {
-            auto& nb = vert_tet_conn[v0];
-            if (nb.empty()) continue;
-            auto flag = prism::tet::smooth_vertex(
-                pc,
-                option,
-                vert_info,
-                tet_info,
-                vert_tet_conn,
-                v0,
-                sizing);
-            if (vert_info[v0].mid_id != -1) {
-                if (flag) snap_flag[vert_info[v0].mid_id] = true;
-            }
-        }
-    }
-    auto cnt_snap = 0;
-    for (auto f : snap_flag) {
-        if (f) cnt_snap++;
-    }
-    spdlog::info("Snapped {} / {}", cnt_snap, snap_flag.size());
+
     serializer("../buildr/debug2.h5", pc, vert_info, tet_info);
 }
 
-auto collapse_pass = [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
-        auto edge_queue = construct_collapse_queue(vert_info, tet_info);
-        spdlog::info("edge queue size {}", edge_queue.size());
-        while (!edge_queue.empty()) {
-            auto [len, v0, v1] = edge_queue.top();
-            edge_queue.pop();
-            {
-                auto& nb1 = vert_tet_conn[v0];
-                auto& nb2 = vert_tet_conn[v1];
-                auto affected = set_inter(nb1, nb2);
-                if (affected.empty()) continue;
-            }
-            prism::tet::collapse_edge(
-                pc,
-                option,
-                vert_info,
-                tet_info,
-                vert_tet_conn,
-                v0,
-                v1,
-                sizing);
-        }
-        spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    };
 
 TEST_CASE("sphere-coarsen")
 {
@@ -486,8 +466,10 @@ TEST_CASE("sphere-coarsen")
     auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
+    // spdlog::set_level(spdlog::level::trace);
+    // spdlog::enable_backtrace(100);
 
-     auto count_face_marks = [&tet_info=tet_info]() {
+    auto count_face_marks = [&tet_info = tet_info]() {
         auto cnt = 0;
         for (auto i = 0; i < tet_info.size(); i++) {
             if (tet_info[i].is_removed) continue;
@@ -497,11 +479,11 @@ TEST_CASE("sphere-coarsen")
         }
         return cnt;
     };
-    auto count_pc_faces = [](const auto&pc) {
+    auto count_pc_faces = [](const auto& pc) {
         auto cnt = 0;
-        for (auto f: pc.F) {
+        for (auto f : pc.F) {
             if (f[0] == -1) continue;
-            cnt ++;
+            cnt++;
         }
         return cnt;
     };
@@ -510,7 +492,7 @@ TEST_CASE("sphere-coarsen")
     REQUIRE_EQ(count_face_marks(), count_pc_faces(pc));
     collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
     REQUIRE_EQ(count_face_marks(), count_pc_faces(pc));
-    // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
+    serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
     // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
     // REQUIRE_EQ(count_face_marks(), pc.F.size());
     // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
@@ -520,20 +502,25 @@ TEST_CASE("sphere-coarsen")
 }
 
 
-
 TEST_CASE("sphere-coarsen2")
 {
-    std::string filename = "../buildr/coarse.h5";
+    std::string filename = "../buildr/debug0.h5";
     PrismCage pc(filename);
     auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
-    auto sizing = 1.;
+    auto sizing = 1e2;
     option.collapse_quality_threshold = 15;
-    collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    for (auto i = 0; i < 20; i++) {
+        collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+
+    }
     serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
-    collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-    serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
-    collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-    serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
+    // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
+    // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
 }
