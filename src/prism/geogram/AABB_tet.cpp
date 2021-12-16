@@ -1,6 +1,7 @@
 #include "AABB_tet.hpp"
 
 #include <geogram/basic/geometry_nd.h>
+#include <geogram/basic/numeric.h>
 #include <geogram/mesh/mesh_AABB.h>
 #include <geogram/mesh/mesh_geometry.h>
 #include <geogram/mesh/mesh_reorder.h>
@@ -20,6 +21,7 @@
 #include <prism/geogram/geogram_utils.hpp>
 #include <prism/intersections.hpp>
 
+#include "prism/predicates/tetrahedron_overlap.hpp"
 #include "prism/predicates/triangle_triangle_intersection.hpp"
 
 prism::geogram::AABB_tet::AABB_tet(const RowMatd& V, const RowMati& T)
@@ -61,4 +63,33 @@ std::tuple<int, Eigen::RowVector4d> prism::geogram::AABB_tet::point_query(const 
         g2e(pp->vertices.point(v3)),
         bc);
     return {geo_cell_ind[tet_id], bc};
+}
+
+std::vector<size_t> prism::geogram::AABB_tet::overlap_tetra(const std::array<Vec3d, 4>& P) const
+{
+    std::vector<size_t> result;
+    using namespace GEO;
+    Box in_box;
+    for (int i = 0; i < 3; i++) {
+        in_box.xyz_max[i] = std::max({P[0][i], P[1][i], P[2][i], P[3][i]});
+        in_box.xyz_min[i] = std::min({P[0][i], P[1][i], P[2][i], P[3][i]});
+    }
+
+    bool found = false;
+    auto action = [&P,&result, &pp=geo_polyhedron_ptr_, &face_map=geo_cell_ind](GEO::index_t cell_id){
+        index_t c = pp->cells.corners_begin(cell_id);
+        Vec4i ind;
+        std::array<Vec3d, 4> g_tetra;
+        for (auto k=0; k<4;k++) {
+          ind[k] = pp->cell_corners.vertex(c+k);
+          auto pt = Geom::mesh_vertex(*pp, ind[k]);
+          g_tetra[k] = Vec3d(pt.x, pt.y, pt.z);
+        }
+        if (prism::predicates::tetrahedron_tetrahedron_overlap(g_tetra, P)) {
+          spdlog::trace("found overlap tetra");
+          result.push_back(face_map[cell_id]);
+        }
+    };
+    geo_tree_ptr_->compute_bbox_cell_bbox_intersections(in_box, action);
+    return result;
 }
