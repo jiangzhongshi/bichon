@@ -662,8 +662,7 @@ bool tetmesh_sanity(
         std::vector<Vec4i> old_tets(nb.size());
         for (auto k = 0; k < nb.size(); k++) old_tets[k] = tet_attrs[nb[k]].conn;
         RowMati bF;
-        igl::boundary_facets(Eigen::Map<RowMati>(old_tets[0].data(), old_tets.size(), 4), 
-                            bF);
+        igl::boundary_facets(Eigen::Map<RowMati>(old_tets[0].data(), old_tets.size(), 4), bF);
         for (auto k = 0; k < bF.size(); k++)
             if (*(bF.data() + k) == i) {
                 spdlog::critical("Internal vert on boundary!");
@@ -683,20 +682,24 @@ bool collapse_edge(
     int v2_id,
     double size_control)
 {
-    spdlog::debug("Tet, Collapsing ({})->{}, with mid {}->{}", v1_id, v2_id,
-    vert_attrs[v1_id].mid_id, vert_attrs[v2_id].mid_id); // erasing v1_id
+    spdlog::debug(
+        "Tet, Collapsing ({})->{}, with mid {}->{}",
+        v1_id,
+        v2_id,
+        vert_attrs[v1_id].mid_id,
+        vert_attrs[v2_id].mid_id); // erasing v1_id
 
     auto& nb1 = vert_conn[v1_id];
     auto& nb2 = vert_conn[v2_id];
     auto affected = nb1;
-    
+
     assert(!set_inter(nb1, nb2).empty());
     if (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id == -1) {
         return false; // TODO: erase v1, and assign its prism tracker to v2.
     }
 
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
-    if (bnd_faces.empty() && (vert_attrs[v1_id].mid_id!=-1 && vert_attrs[v2_id].mid_id!=-1)) {
+    if (bnd_faces.empty() && (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id != -1)) {
         spdlog::trace("Internal edge connecting boundary vertices.");
         return false;
     }
@@ -953,7 +956,46 @@ bool swap_face(
     if (after_size > size_control) return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) throw std::runtime_error("Sanity Error.");
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc))
+        throw std::runtime_error("Sanity Error.");
     return true;
 }
+
+
+void compact_tetmesh(
+    std::vector<prism::tet::VertAttr>& vert_info,
+    std::vector<prism::tet::TetAttr>& tet_info,
+    std::vector<std::vector<int>>& vert_tet_conn)
+{
+    //
+    auto vert_map_old2new = std::vector<int>(vert_info.size(), -1);
+    auto real_vnum = 0, real_tnum = 0;
+    for (auto i = 0; i < vert_info.size(); i++) {
+        if (vert_tet_conn[i].empty()) { // remove isolated
+            continue;
+        }
+        vert_map_old2new[i] = real_vnum;
+        if (real_vnum != i) vert_info[real_vnum] = std::move(vert_info[i]);
+        real_vnum++;
+    }
+    vert_info.resize(real_vnum);
+    auto new_vt_conn = std::vector<std::vector<int>>(real_vnum);
+    auto tet_map_old2new = std::vector<int>(tet_info.size(), -1);
+    for (auto i = 0; i < tet_info.size(); i++) {
+        if (tet_info[i].is_removed) continue;
+        tet_map_old2new[i] = real_tnum;
+        if (real_tnum != i) tet_info[real_tnum] = std::move(tet_info[i]);
+        for (auto j = 0; j < 4; j++) {
+            auto& vi = tet_info[real_tnum].conn[j];
+            vi = vert_map_old2new[vi];
+            assert(vi != -1);
+            new_vt_conn[vi].push_back(real_tnum);
+        }
+        real_tnum++;
+    }
+    tet_info.resize(real_tnum);
+
+    vert_tet_conn = std::move(new_vt_conn);
+}
+
 } // namespace prism::tet

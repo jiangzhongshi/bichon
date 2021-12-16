@@ -16,19 +16,18 @@ namespace prism::tet {
 
 struct TetAttr
 {
-    std::array<int, 4> prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
+    Vec4i prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
     bool is_removed = false;
-    Vec4i conn;
+    Vec4i conn = {{-1,-1,-1,-1}};
 };
 
 struct VertAttr
 {
-    Vec3d pos;
+    Vec3d pos = Vec3d::Zero();
     int mid_id = -1; /**Points to the vertex id in the shell*/
 };
 
 /**
- * @brief Assuming an initial conforming mesh: tet_v[:len(mV)] = mV
  *
  * @param pc
  * @param tet_v
@@ -97,7 +96,13 @@ bool collapse_edge(
     int v2_id,
     double size_control);
 
+void compact_tetmesh(
+    std::vector<prism::tet::VertAttr>& vert_info,
+    std::vector<prism::tet::TetAttr>& tet_info,
+    std::vector<std::vector<int>>& vert_tet_conn);
+
 } // namespace prism::tet
+
 namespace prism::tet {
 double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);

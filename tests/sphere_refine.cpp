@@ -79,7 +79,7 @@ auto construct_collapse_queue = [](const auto& vert_info, const auto& tet_info) 
         if (tet.is_removed) continue;
         for (auto e : local_edges) {
             auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-            if (v0 > v1) continue;
+            // if (v0 > v1) continue;
             edge_set.emplace(v0, v1);
         }
     }
@@ -418,10 +418,12 @@ TEST_CASE("split-pass")
 auto vertexsmooth_pass =
     [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
         std::vector<bool> snap_flag(pc.mid.size(), false);
+        auto total_cnt = 0;
         {
             for (auto v0 = 0; v0 < vert_info.size(); v0++) {
                 auto& nb = vert_tet_conn[v0];
                 if (nb.empty()) continue;
+                total_cnt++;
                 auto flag = prism::tet::smooth_vertex(
                     pc,
                     option,
@@ -439,7 +441,7 @@ auto vertexsmooth_pass =
         for (auto f : snap_flag) {
             if (f) cnt_snap++;
         }
-        spdlog::info("Snapped {} / {}", cnt_snap, snap_flag.size());
+        spdlog::info("Snapped {} / {}", cnt_snap, total_cnt);
     };
 TEST_CASE("reload-swap")
 {
@@ -516,10 +518,12 @@ TEST_CASE("sphere-coarsen2")
     for (auto i = 0; i < 5; i++) {
         vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
         faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn);
         collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
         edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
         collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
         vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn);
     }
     serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
     // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
