@@ -1,9 +1,13 @@
 #pragma once
 
+#include <memory>
 #include <prism/common.hpp>
-#include "prism/local_operations/section_remesh.hpp"
+
 
 struct PrismCage;
+namespace prism::geogram {
+    struct AABB_tet;
+}
 
 namespace prism::local {
 struct RemeshOptions;
@@ -13,6 +17,14 @@ struct RemeshOptions;
  *
  */
 namespace prism::tet {
+
+struct SizeController
+{
+    std::shared_ptr<prism::geogram::AABB_tet> bg_tree;
+    Eigen::VectorXd sizes;
+    SizeController(const RowMatd & tetV, const RowMati & tetT, const Eigen::VectorXd& tetSize);
+    double find_size_bound(const std::array<Vec3d,4>&) const;
+};
 
 struct TetAttr
 {

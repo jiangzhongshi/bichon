@@ -2,6 +2,7 @@
 #include <geogram/basic/geometry.h>
 #include <igl/Timer.h>
 #include <igl/avg_edge_length.h>
+#include <igl/barycenter.h>
 #include <igl/combine.h>
 #include <igl/read_triangle_mesh.h>
 #include <spdlog/fmt/bundled/ranges.h>
@@ -12,6 +13,7 @@
 #include <batm/tetra_utils.hpp>
 #include <highfive/H5Easy.hpp>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <prism/common.hpp>
 #include <prism/geogram/AABB.hpp>
@@ -468,8 +470,6 @@ TEST_CASE("sphere-coarsen")
     auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
-    // spdlog::set_level(spdlog::level::trace);
-    // spdlog::enable_backtrace(100);
 
     auto count_face_marks = [&tet_info = tet_info]() {
         auto cnt = 0;
@@ -494,17 +494,10 @@ TEST_CASE("sphere-coarsen")
     REQUIRE_EQ(count_face_marks(), count_pc_faces(pc));
     collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
     REQUIRE_EQ(count_face_marks(), count_pc_faces(pc));
-    serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
-    // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-    // REQUIRE_EQ(count_face_marks(), pc.F.size());
-    // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
-    // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-    // REQUIRE_EQ(count_face_marks(), pc.F.size());
-    // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
 }
 
 
-TEST_CASE("sphere-coarsen2")
+TEST_CASE("sphere-coarsen-aggresive")
 {
     std::string filename = "../buildr/debug0.h5";
     PrismCage pc(filename);
@@ -530,4 +523,45 @@ TEST_CASE("sphere-coarsen2")
     // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
     // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
     // serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
+}
+
+TEST_CASE("graded-sphere")
+{
+    std::string filename = "../buildr/coarse.h5";
+    PrismCage pc(filename);
+    auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
+    prism::local::RemeshOptions option(pc.mid.size(), 0.1);
+
+    auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
+    {
+        H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
+        auto bgV = H5Easy::load<RowMatd>(file, "V");
+        auto bgT = H5Easy::load<RowMati>(file, "T");
+        Eigen::VectorXd sizes(bgT.rows());
+        // assign size
+        RowMatd BC;
+        igl::barycenter(bgV, bgT, BC);
+        for (auto i = 0; i < bgT.rows(); i++) {
+            if (BC(i, 0) > 0.5) sizes[i] = 1.0;
+            if (BC(i, 0) < -0.5) sizes[i] = 1e-2;
+        }
+        sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
+    }
+
+    option.collapse_quality_threshold = 150;
+    std::vector<bool> split_due(tet_info.size(), false);
+    // split_pass();
+    for (auto i = 0; i < tet_info.size(); i++) {
+        if (tet_info[i].is_removed) continue;
+        auto& tet = tet_info[i].conn;
+        std::array<Vec3d, 4> stack_pos;
+        for (auto j = 0; j < 4; j++) {
+            stack_pos[j] = vert_info[tet[j]].pos;
+        }
+        auto cur_size = prism::tet::circumradi2(stack_pos[0], stack_pos[1], stack_pos[2], stack_pos[3]);
+        auto size_con = sizer->find_size_bound(stack_pos);
+        if (size_con < cur_size) split_due[i] = true;
+    }
+
+    
 }

@@ -77,6 +77,7 @@ endif()
 add_library(batm_library
           batm/tetra_utils.cpp
           batm/tetra_quality.cpp
+          batm/tetra_size_control.cpp
           batm/AMIPS.cpp
           )
 target_compile_features(batm_library PUBLIC cxx_std_17)
