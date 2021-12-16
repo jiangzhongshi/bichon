@@ -2,6 +2,7 @@
 
 #include "AMIPS.h"
 
+#include <igl/boundary_facets.h>
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
@@ -14,9 +15,22 @@
 #include <prism/local_operations/remesh_pass.hpp>
 #include <prism/local_operations/validity_checks.hpp>
 #include <prism/spatial-hash/AABB_hash.hpp>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 #include "prism/cgal/triangle_triangle_intersection.hpp"
+
+void abort_and_debug(std::string msg = "")
+{
+    spdlog::dump_backtrace();
+    assert(false && msg.c_str());
+    throw std::runtime_error(msg);
+}
+
+void require(bool cond, std::string msg)
+{
+    if (!cond) abort_and_debug(msg);
+}
 auto set_inter = [](auto& A, auto& B) {
     std::vector<int> vec;
     std::set_intersection(A.begin(), A.end(), B.begin(), B.end(), std::back_inserter(vec));
@@ -257,7 +271,7 @@ void update_tetra_conn(
         // assert(moved_pris_assigner.find(t) == moved_pris_assigner.end());
         moved_pris_assigner.insert_or_assign(t, modified_pids[i]);
     }
-    spdlog::trace("sorted moved tris number {}", moved_pris_assigner);
+    spdlog::trace("sorted moved tris {}", moved_pris_assigner);
     spdlog::trace("new pid num {}", modified_pids.size());
     auto cnt_assigned_prisms = 0;
 
@@ -313,7 +327,12 @@ void update_tetra_conn(
         cnt_assigned_prisms);
     // assert(cnt_assigned_prisms == sorted_moved_tris.size() && "All assigned");
     assert(n_tet == tet_attrs.size());
-    assert(modified_tris.size() <= cnt_assigned_prisms && "Some new prisms are not assigned!");
+    require(modified_tris.size() <= cnt_assigned_prisms, "Some new prisms are not assigned!");
+    if (modified_tris.empty()) { // internal
+        require(
+            moved_pris_assigner.size() == cnt_assigned_prisms,
+            "Internal edge should not lose any tag.");
+    }
 }
 
 
@@ -563,6 +582,97 @@ bool smooth_vertex(
     return true;
 }
 
+bool tetmesh_sanity(
+    const std::vector<TetAttr>& tet_attrs,
+    const std::vector<VertAttr>& vert_attrs,
+    const std::vector<std::vector<int>>& vert_tet_conn,
+    const PrismCage& pc)
+{
+    for (auto& tet : tet_attrs) {
+        if (tet.is_removed) continue;
+        if (!tetra_validity(vert_attrs, tet.conn)) {
+            spdlog::critical("Invalid Tet {}", tet.conn);
+            return false;
+        }
+    }
+
+    // duplicate tets
+    auto tet_duplicate = std::set<Vec4i>();
+    auto face_duplicate = std::map<Vec3i, int>();
+    for (auto& tet : tet_attrs) {
+        if (tet.is_removed) continue;
+        {
+            auto conn = tet.conn;
+            std::sort(conn.begin(), conn.end());
+            auto it = tet_duplicate.find(conn);
+            if (it == tet_duplicate.end())
+                tet_duplicate.insert(conn);
+            else {
+                spdlog::critical("duplicate tet {}", tet.conn);
+                return false;
+            }
+        }
+        for (auto j = 0; j < 4; j++) {
+            auto face = sorted_face(tet.conn, j);
+            auto it = face_duplicate.find(face);
+            if (it == face_duplicate.end())
+                face_duplicate.emplace(face, 1);
+            else {
+                it->second++;
+                if (it->second > 2) {
+                    spdlog::critical("Duplicate face {}", face);
+                    return false;
+                }
+            }
+        }
+    }
+
+    // corresponding prism id
+    auto prism_faces = std::set<Vec3i>();
+    auto boundary_faces = std::set<Vec3i>();
+    for (auto& tet : tet_attrs) {
+        if (tet.is_removed) continue;
+        for (auto j = 0; j < 4; j++) {
+            if (tet.prism_id[j] != -1) {
+                auto face = sorted_face(tet.conn, j);
+                boundary_faces.insert(face);
+            }
+        }
+    }
+    auto count_pc_faces = [](const auto& pc) {
+        auto cnt = 0;
+        for (auto f : pc.F) {
+            if (f[0] == -1) continue;
+            cnt++;
+        }
+        return cnt;
+    };
+    if (boundary_faces.size() != count_pc_faces(pc)) {
+        spdlog::critical("Miss referenced prism.");
+        return false;
+    }
+
+    // check internal vertices has neighbor
+    for (auto i = 0; i < vert_attrs.size(); i++) {
+        if (vert_attrs[i].mid_id >= 0) continue;
+        auto& nb = (vert_tet_conn[i]);
+        if (nb.empty()) continue;
+
+
+        std::vector<Vec4i> old_tets(nb.size());
+        for (auto k = 0; k < nb.size(); k++) old_tets[k] = tet_attrs[nb[k]].conn;
+        RowMati bF;
+        igl::boundary_facets(Eigen::Map<RowMati>(old_tets[0].data(), old_tets.size(), 4), 
+                            bF);
+        for (auto k = 0; k < bF.size(); k++)
+            if (*(bF.data() + k) == i) {
+                spdlog::critical("Internal vert on boundary!");
+                return false;
+            };
+    }
+    return true;
+}
+
 bool collapse_edge(
     PrismCage& pc,
     const prism::local::RemeshOptions& option,
@@ -573,15 +683,23 @@ bool collapse_edge(
     int v2_id,
     double size_control)
 {
-    spdlog::debug("Tet, Collapsing ({})->{}", v1_id, v2_id); // erasing v1_id
+    spdlog::debug("Tet, Collapsing ({})->{}, with mid {}->{}", v1_id, v2_id,
+    vert_attrs[v1_id].mid_id, vert_attrs[v2_id].mid_id); // erasing v1_id
+
     auto& nb1 = vert_conn[v1_id];
     auto& nb2 = vert_conn[v2_id];
     auto affected = nb1;
+    
     assert(!set_inter(nb1, nb2).empty());
     if (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id == -1) {
         return false; // TODO: erase v1, and assign its prism tracker to v2.
     }
 
+    auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
+    if (bnd_faces.empty() && (vert_attrs[v1_id].mid_id!=-1 && vert_attrs[v2_id].mid_id!=-1)) {
+        spdlog::trace("Internal edge connecting boundary vertices.");
+        return false;
+    }
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
     auto before_quality = compute_quality(vert_attrs, old_tets);
@@ -623,7 +741,6 @@ bool collapse_edge(
     for (auto t : new_tets) {
         if (!tetra_validity(vert_attrs, t)) return false;
     }
-    auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v1_id, v2_id);
     for (auto f : bnd_faces) {
         assert(pc.F[f][0] != -1);
     }
@@ -692,80 +809,14 @@ bool collapse_edge(
         update_pc(pc, old_fid, new_fid, moved_tris, new_tracks);
         vert_attrs[v1_id].mid_id = vert_attrs[v2_id].mid_id;
     }
-    // vert_attrs[v1_id].removed = true;
+
     vert_conn[v1_id].clear();
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
 
     vert_attrs[v1_id].pos.fill(0);
     vert_attrs[v1_id].mid_id = -1;
 
-    auto tetmesh_sanity = [&tet_attrs, &vert_attrs, &pc = std::as_const(pc)]() -> bool {
-        for (auto& tet : tet_attrs) {
-            if (tet.is_removed) continue;
-            if (!tetra_validity(vert_attrs, tet.conn)) {
-                spdlog::critical("Invalid Tet {}", tet.conn);
-                return false;
-            }
-        }
-
-        // duplicate tets
-        auto tet_duplicate = std::set<Vec4i>();
-        auto face_duplicate = std::map<Vec3i, int>();
-        for (auto& tet : tet_attrs) {
-            if (tet.is_removed) continue;
-            {
-                auto conn = tet.conn;
-                std::sort(conn.begin(), conn.end());
-                auto it = tet_duplicate.find(conn);
-                if (it == tet_duplicate.end())
-                    tet_duplicate.insert(conn);
-                else {
-                    spdlog::critical("duplicate tet {}", tet.conn);
-                    return false;
-                }
-            }
-            for (auto j = 0; j < 4; j++) {
-                auto face = sorted_face(tet.conn, j);
-                auto it = face_duplicate.find(face);
-                if (it == face_duplicate.end())
-                    face_duplicate.emplace(face, 1);
-                else {
-                    it->second++;
-                    if (it->second > 2) {
-                        spdlog::critical("Duplicate face {}", face);
-                        return false;
-                    }
-                }
-            }
-        }
-
-        // corresponding prism id
-        auto prism_faces = std::set<Vec3i>();
-        auto boundary_faces = std::set<Vec3i>();
-        for (auto& tet : tet_attrs) {
-            if (tet.is_removed) continue;
-            for (auto j = 0; j < 4; j++) {
-                if (tet.prism_id[j] != -1) {
-                    auto face = sorted_face(tet.conn, j);
-                    boundary_faces.insert(face);
-                }
-            }
-        }
-        auto count_pc_faces = [](const auto& pc) {
-            auto cnt = 0;
-            for (auto f : pc.F) {
-                if (f[0] == -1) continue;
-                cnt++;
-            }
-            return cnt;
-        };
-        if (boundary_faces.size() != count_pc_faces(pc)) {
-            spdlog::critical("Miss referenced prism.");
-            return false;
-        }
-        return true;
-    };
-    assert(tetmesh_sanity());
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
 
     return true;
 }
@@ -837,6 +888,8 @@ bool swap_edge(
     }
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
     return true;
 }
 
@@ -900,6 +953,7 @@ bool swap_face(
     if (after_size > size_control) return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) throw std::runtime_error("Sanity Error.");
     return true;
 }
 } // namespace prism::tet

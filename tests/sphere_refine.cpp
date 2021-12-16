@@ -141,7 +141,7 @@ auto faceswap_pass = [](auto& pc,
                         auto& vert_tet_conn,
                         auto sizing) {
     auto face_queue = construct_face_queue(vert_info, tet_info);
-    spdlog::info("face queue size {}", face_queue.size());
+    spdlog::info("Face Swap: queue size {}", face_queue.size());
     spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
     while (!face_queue.empty()) {
         auto [len, v0, v1, v2] = face_queue.top();
@@ -153,7 +153,7 @@ auto faceswap_pass = [](auto& pc,
 auto edgeswap_pass =
     [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
         auto edge_queue = construct_edge_queue(vert_info, tet_info);
-        spdlog::info("edge queue size {}", edge_queue.size());
+        spdlog::info("Edge Swap: queue size {}", edge_queue.size());
         while (!edge_queue.empty()) {
             auto [len, v0, v1] = edge_queue.top();
             edge_queue.pop();
@@ -168,7 +168,7 @@ auto collapse_pass = [](auto& pc,
                         auto& vert_tet_conn,
                         auto sizing) {
     auto edge_queue = construct_collapse_queue(vert_info, tet_info);
-    spdlog::info("edge queue size {}", edge_queue.size());
+    spdlog::info("Edge Collapse: queue size {}", edge_queue.size());
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
         edge_queue.pop();
@@ -510,13 +510,16 @@ TEST_CASE("sphere-coarsen2")
 
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
     auto sizing = 1e2;
-    option.collapse_quality_threshold = 15;
-    for (auto i = 0; i < 20; i++) {
-        collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-        faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-        edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+    option.collapse_quality_threshold = 150;
+    //  spdlog::set_level(spdlog::level::trace);
+    spdlog::enable_backtrace(100);
+    for (auto i = 0; i < 5; i++) {
         vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
-
+        faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
+        vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
     }
     serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
     // collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizing);
