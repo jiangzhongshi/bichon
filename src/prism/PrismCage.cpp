@@ -437,65 +437,78 @@ PrismCage::PrismCage(std::string filename) {
   load_from_hdf5(filename);
 }
 
-void PrismCage::cleanup_empty_faces(Eigen::VectorXi &NI, Eigen::VectorXi &NJ) {
-  // this is called after collapse pass.
-  constexpr auto mark_zero_rows = [](const auto &vecF, RowMati &mat) {
-    std::vector<Vec3i> newF;
-    newF.reserve(vecF.size());
-    for (int i = 0; i < vecF.size(); i++) {
-      auto &f = vecF[i];
-      if (f[0] != f[1])
-        newF.push_back(f);
-      else
-        newF.push_back({-1, -1, -1});
+
+void PrismCage::cleanup_empty_faces(Eigen::VectorXi& NI, Eigen::VectorXi& NJ)
+{
+    std::vector<int> face_map;
+    cleanup_empty_faces(NI, NJ, face_map);
+}
+
+void PrismCage::cleanup_empty_faces(
+    Eigen::VectorXi& NI,
+    Eigen::VectorXi& NJ,
+    std::vector<int>& face_map)
+{
+    // this is called after collapse pass.
+    constexpr auto mark_zero_rows = [](const auto& vecF, RowMati& mat) {
+        std::vector<Vec3i> newF;
+        newF.reserve(vecF.size());
+        for (int i = 0; i < vecF.size(); i++) {
+            auto& f = vecF[i];
+            if (f[0] != f[1])
+                newF.push_back(f);
+            else
+                newF.push_back({-1, -1, -1});
+        }
+        mat = Eigen::Map<RowMati>(newF[0].data(), newF.size(), 3);
+    };
+
+    RowMati mF;
+    mark_zero_rows(F, mF);
+    igl::remove_unreferenced(mid.size(), mF, NI, NJ);
+
+    // assuming NJ is sorted ascending
+    for (int i = 0; i < NJ.size() - 1; i++) assert(NJ[i] < NJ[i + 1]);
+
+    for (int i = 0; i < NJ.size(); i++) {
+        mid[i] = mid[NJ[i]];
+        base[i] = base[NJ[i]];
+        top[i] = top[NJ[i]];
     }
-    mat = Eigen::Map<RowMati>(newF[0].data(), newF.size(), 3);
-  };
+    mid.resize(NJ.size());
+    base.resize(NJ.size());
+    top.resize(NJ.size());
 
-  RowMati mF;
-  mark_zero_rows(F, mF);
-  igl::remove_unreferenced(mid.size(), mF, NI, NJ);
+    int cur = 0;
+    face_map.clear();
+    face_map.resize(F.size(), -1);
+    for (int i = 0; i < F.size(); i++) {
+        if (F[i][0] == F[i][1]) continue;
+        if (track_ref[i].size() == 0) spdlog::error("Zero Tracer");
+        if (i != cur) track_ref[cur] = std::move(track_ref[i]);
+        for (int j = 0; j < 3; j++) F[cur][j] = NI[F[i][j]];
+        if (F[cur][0] > F[cur][1] || F[cur][0] > F[cur][2])
+            spdlog::error("v0 v1 v2 order wrong at {}", cur);
+        face_map[i] = cur;
+        cur++;
+    }
+    track_ref.resize(cur);
+    F.resize(cur);
 
-#ifndef NDEBUG
-  // assuming NJ is sorted ascending
-  for (int i = 0; i < NJ.size() - 1; i++) assert(NJ[i] < NJ[i + 1]);
-#endif
-  for (int i = 0; i < NJ.size(); i++) {
-    mid[i] = mid[NJ[i]];
-    base[i] = base[NJ[i]];
-    top[i] = top[NJ[i]];
-  }
-  mid.resize(NJ.size());
-  base.resize(NJ.size());
-  top.resize(NJ.size());
+    auto& vid_map = NI;
+    // feature meta edges
+    std::map<std::pair<int, int>, std::pair<int, std::vector<int>>> new_metas;
+    for (auto m : meta_edges) {
+        auto [u0, u1] = m.first;
+        new_metas[{vid_map[u0], vid_map[u1]}] = m.second;
+    }
+    meta_edges = std::move(new_metas);
 
-  int cur = 0;
-  for (int i = 0; i < F.size(); i++) {
-    if (F[i][0] == F[i][1]) continue;
-    if (track_ref[i].size() == 0) spdlog::error("Zero Tracer");
-    if (i != cur) track_ref[cur] = std::move(track_ref[i]);
-    for (int j = 0; j < 3; j++) F[cur][j] = NI[F[i][j]];
-    if (F[cur][0] > F[cur][1] || F[cur][0] > F[cur][2])
-      spdlog::error("v0 v1 v2 order wrong at {}", cur);
-    cur++;
-  }
-  track_ref.resize(cur);
-  F.resize(cur);
-
-  auto &vid_map = NI;
-  // feature meta edges
-  std::map<std::pair<int, int>, std::pair<int, std::vector<int>>> new_metas;
-  for (auto m : meta_edges) {
-    auto [u0, u1] = m.first;
-    new_metas[{vid_map[u0], vid_map[u1]}] = m.second;
-  }
-  meta_edges = std::move(new_metas);
-
-  // hash grid update.
-  if (top_grid != nullptr) {
-    top_grid->update_after_collapse();
-    base_grid->update_after_collapse();
-    assert(top_grid->face_stores.size() == F.size());
-    assert(base_grid->face_stores.size() == F.size());
-  }
+    // hash grid update.
+    if (top_grid != nullptr) {
+        top_grid->update_after_collapse();
+        base_grid->update_after_collapse();
+        assert(top_grid->face_stores.size() == F.size());
+        assert(base_grid->face_stores.size() == F.size());
+    }
 }

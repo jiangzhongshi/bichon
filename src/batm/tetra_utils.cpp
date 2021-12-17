@@ -349,7 +349,7 @@ bool split_edge(
     auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
     assert(!affected.empty());
-    spdlog::info("Splitting...");
+    spdlog::debug("Splitting... {} {}", v0, v1);
 
     std::vector<Vec4i> new_tets;
     std::vector<TetAttr> new_attrs;
@@ -436,6 +436,9 @@ bool split_edge(
         spdlog::trace("vx {}", vx);
         return true;
     }());
+
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
+
     return true;
 }
 
@@ -519,21 +522,23 @@ bool smooth_vertex(
     Vec3d newton_pos = Vec3d::Zero();
     Vec3d old_mid = Vec3d::Zero();
 
-    if (pv0 != -1) { // internal
-        assert(!neighbor_pris.empty());
-        newton_pos = get_snap_position(pc, neighbor_pris, pv0);
-        old_mid = pc.mid[pv0];
-    } else {
-        newton_pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
-    }
-
     auto rollback = [&]() {
         vert_attrs[v0].pos = old_pos;
         if (pv0 != -1) pc.mid[pv0] = old_mid;
         return false;
     };
 
+    if (pv0 != -1) { // internal
+        assert(!neighbor_pris.empty());
+        newton_pos = get_snap_position(pc, neighbor_pris, pv0);
+        old_mid = pc.mid[pv0];
+        pc.mid[pv0] = newton_pos;
+    } else {
+        newton_pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
+    }
     vert_attrs[v0].pos = newton_pos;
+
+
     if (pv0 == -1) {
         // Consider size only when internal. TODO: figure out priority of snapping vs size.
         auto old_tets = std::vector<Vec4i>(nb.size());
@@ -668,6 +673,21 @@ bool tetmesh_sanity(
                 spdlog::critical("Internal vert on boundary!");
                 return false;
             };
+    }
+
+    // check that mid is that same as pos
+    for (auto i = 0; i < vert_attrs.size(); i++) {
+        auto& v = vert_attrs[i];
+        if (v.mid_id != -1)
+            if (v.pos != pc.mid[v.mid_id]) {
+                spdlog::critical(
+                    "Pos for {} ({}) not equal mid {} {}",
+                    i,
+                    pc.mid[v.mid_id],
+                    v.mid_id,
+                    pc.mid[v.mid_id]);
+                return false;
+            }
     }
     return true;
 }
@@ -965,7 +985,8 @@ bool swap_face(
 void compact_tetmesh(
     std::vector<prism::tet::VertAttr>& vert_info,
     std::vector<prism::tet::TetAttr>& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn)
+    std::vector<std::vector<int>>& vert_tet_conn,
+    PrismCage* pc)
 {
     //
     auto vert_map_old2new = std::vector<int>(vert_info.size(), -1);
@@ -996,6 +1017,24 @@ void compact_tetmesh(
     tet_info.resize(real_tnum);
 
     vert_tet_conn = std::move(new_vt_conn);
+    if (pc != nullptr) {
+        Eigen::VectorXi vid_ind, vid_map;
+        std::vector<int> face_map_o2n;
+        pc->cleanup_empty_faces(vid_map, vid_ind, face_map_o2n);
+
+        for (auto& v : vert_info) {
+            if (v.mid_id != -1) v.mid_id = vid_map[v.mid_id];
+        }
+        for (auto& t : tet_info) {
+            auto& p = t.prism_id;
+            for (auto j = 0; j < 4; j++) {
+                if (p[j] != -1) {
+                    p[j] = face_map_o2n[p[j]];
+                    assert(p[j] != -1);
+                }
+            }
+        }
+    }
 }
 
 } // namespace prism::tet

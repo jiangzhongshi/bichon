@@ -75,6 +75,7 @@ struct PrismCage {
   void load_from_hdf5(std::string);
   void construct_cage(const RowMatd &);
   void init_track();
+  void cleanup_empty_faces(Eigen::VectorXi &NI, Eigen::VectorXi &NJ, std::vector<int>& face_map_old2new);
   void cleanup_empty_faces(Eigen::VectorXi &NI, Eigen::VectorXi &NJ);
 };
 

@@ -28,9 +28,9 @@ struct SizeController
 
 struct TetAttr
 {
+    Vec4i conn = {{-1,-1,-1,-1}};
     Vec4i prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
     bool is_removed = false;
-    Vec4i conn = {{-1,-1,-1,-1}};
 };
 
 struct VertAttr
@@ -111,8 +111,14 @@ bool collapse_edge(
 void compact_tetmesh(
     std::vector<prism::tet::VertAttr>& vert_info,
     std::vector<prism::tet::TetAttr>& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn);
+    std::vector<std::vector<int>>& vert_tet_conn,
+    PrismCage *pc = nullptr);
 
+bool tetmesh_sanity(
+    const std::vector<TetAttr>& tet_attrs,
+    const std::vector<VertAttr>& vert_attrs,
+    const std::vector<std::vector<int>>& vert_tet_conn,
+    const PrismCage& pc);
 } // namespace prism::tet
 
 namespace prism::tet {
