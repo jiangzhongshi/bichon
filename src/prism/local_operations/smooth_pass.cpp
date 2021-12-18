@@ -205,7 +205,7 @@ void prism::local::localsmooth_pass(PrismCage &pc,
     vec2eigen(tetT, tT);
     Eigen::VectorXd vols;
     igl::volume(tV, tT, vols);
-    spdlog::warn("Volumes {} {} {}", vols.minCoeff(), vols.maxCoeff(),
+    spdlog::info("Volumes {} {} {}", vols.minCoeff(), vols.maxCoeff(),
                  vols.mean());
   }
 #endif
@@ -256,73 +256,3 @@ void prism::local::localsmooth_pass(PrismCage &pc,
   total_energy(pc.mid, pc.F);
   return;
 }
-
-namespace prism::local {
-
-void legacy_smooth_prism(PrismCage &pc, int vid,
-                         const std::vector<std::vector<int>> &VF,
-                         const std::vector<std::vector<int>> &VFi,
-                         const prism::local::RemeshOptions &option,
-                         const std::vector<bool> &skip, bool on_base) {
-  if (skip[vid]) return;
-
-  auto great_prism = prism::smoother_location_legacy(
-      pc.base, pc.mid, pc.top, pc.F, pc.ref.aabb->num_freeze, VF, VFi, vid,
-      on_base);
-  if (!great_prism) {
-    spdlog::trace("Legacy Smooth failed.");
-    return;
-  }
-
-  std::array<Vec3d, 3> relocations{pc.base[vid], pc.mid[vid], pc.top[vid]};
-  relocations[on_base ? 0 : 2] = great_prism.value();
-  relocations[1] = (relocations[0] + relocations[2]) / 2;
-
-  std::vector<std::set<int>> checker;
-  auto flag = 1;
-  double alpha = 1.;
-  throw std::runtime_error("legacy code.");
-  // flag = prism::local_validity::attempt_relocate(
-      // pc, pc.track_ref, option, VF[vid], vid, relocations, {}, checker);
-  if (flag > 0) {
-    spdlog::trace("ZoomRotate checker failed.");
-  } else {
-    for (int i = 0; i < VF[vid].size(); i++) {
-      pc.track_ref[VF[vid][i]] = std::move(checker[i]);
-    }
-    spdlog::trace("ZoomRotate SUCCEED, move to next.");
-  }
-}
-
-void shellsmooth_pass(PrismCage &pc, const RemeshOptions &option) {
-  std::vector<std::vector<int>> VF, VFi, groups;
-  std::vector<bool> skip_flag(pc.mid.size(), false);
-  {
-    RowMati mF, mE;
-    vec2eigen(pc.F, mF);
-    igl::vertex_triangle_adjacency(pc.mid.size(), mF, VF, VFi);
-    prism::local::vertex_coloring(mF, groups);
-    igl::boundary_facets(mF, mE);
-    spdlog::info("boundary, mE {}", mE.rows());
-    for (int i = 0; i < mE.rows(); i++)
-      for (auto j : {0, 1}) {
-        skip_flag[mE(i, j)] = true;
-      }
-    for (int i = 0; i < pc.ref.aabb->num_freeze; i++) skip_flag[i] = true;
-  }
-  spdlog::info("Group Count {}", groups.size());
-  std::srand(0);
-
-  for (auto &gr : groups)
-    igl::parallel_for(
-        gr.size(),
-        [&gr, &pc, &VF, &VFi, &option, &skip_flag](auto ii) {
-          legacy_smooth_prism(pc, gr[ii], VF, VFi, option, skip_flag, true);
-          legacy_smooth_prism(pc, gr[ii], VF, VFi, option, skip_flag, false);
-        },
-        size_t(option.parallel ? 1 : pc.mid.size()));
-
-  return;
-}
-
-}  // namespace prism::local

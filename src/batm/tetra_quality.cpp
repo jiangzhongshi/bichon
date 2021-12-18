@@ -45,7 +45,7 @@ bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t)
 }
 
 
-Vec3d newton_direction_from_stack(std::vector<std::array<double, 12>>& assembles)
+Vec3d newton_position_from_stack(std::vector<std::array<double, 12>>& assembles)
 {
     assert(!assembles.empty());
     auto& T = assembles.front();

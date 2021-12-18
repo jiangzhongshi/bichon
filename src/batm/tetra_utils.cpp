@@ -1,6 +1,13 @@
 #include "tetra_utils.hpp"
 
+#include <prism/PrismCage.hpp>
+#include <prism/geogram/AABB.hpp>
+#include <prism/local_operations/remesh_pass.hpp>
+#include <prism/local_operations/validity_checks.hpp>
+#include <prism/spatial-hash/AABB_hash.hpp>
 #include "AMIPS.h"
+#include "prism/cgal/triangle_triangle_intersection.hpp"
+#include "prism/energy/smoother_pillar.hpp"
 
 #include <igl/boundary_facets.h>
 #include <spdlog/fmt/bundled/ranges.h>
@@ -10,15 +17,9 @@
 #include <algorithm>
 #include <cassert>
 #include <limits>
-#include <prism/PrismCage.hpp>
-#include <prism/geogram/AABB.hpp>
-#include <prism/local_operations/remesh_pass.hpp>
-#include <prism/local_operations/validity_checks.hpp>
-#include <prism/spatial-hash/AABB_hash.hpp>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include "prism/cgal/triangle_triangle_intersection.hpp"
 
 void abort_and_debug(std::string msg = "")
 {
@@ -66,6 +67,8 @@ auto sorted_face = [](auto& conn, auto j) {
     std::sort(face.begin(), face.end());
     return face;
 };
+
+auto attempt_shell_operation = prism::local_validity::attempt_zig_remesh;
 
 namespace prism::tet {
 
@@ -414,7 +417,7 @@ bool split_edge(
 
         std::vector<std::set<int>> new_tracks;
         std::vector<RowMatd> local_cp;
-        auto flag = prism::local_validity::attempt_zig_remesh(
+        auto flag = attempt_shell_operation(
             pc,
             pc.track_ref,
             option,
@@ -471,7 +474,7 @@ auto get_newton_position = [](const auto& vert_attrs,
         iter_id++;
     }
 
-    return newton_direction_from_stack(assembles);
+    return newton_position_from_stack(assembles);
 };
 
 Vec3d get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
@@ -505,6 +508,16 @@ bool smooth_vertex(
     int v0,
     double size_control)
 {
+    enum SmoothType {
+        kSurfaceSnap = 0,
+        kInteriorNewton,
+        kShellZoom,
+        kShellPan,
+        kShellRotate,
+        kMax
+    } smooth_type;
+
+
     auto& nb = vert_conn[v0];
     const Vec3d old_pos = vert_attrs[v0].pos;
     auto neighbor_pris = std::vector<int>();
@@ -519,24 +532,41 @@ bool smooth_vertex(
     }
 
 
-    Vec3d newton_pos = Vec3d::Zero();
-    Vec3d old_mid = Vec3d::Zero();
+    const auto old_pillar = pv0 != -1 ? std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0])
+                                      : std::tuple<Vec3d, Vec3d, Vec3d>();
 
     auto rollback = [&]() {
         vert_attrs[v0].pos = old_pos;
-        if (pv0 != -1) pc.mid[pv0] = old_mid;
+        if (pv0 != -1) std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0]) = old_pillar;
         return false;
     };
 
-    if (pv0 != -1) { // internal
+
+    switch (smooth_type) {
+    case SmoothType::kSurfaceSnap:
+        assert(pv0 != -1);
         assert(!neighbor_pris.empty());
-        newton_pos = get_snap_position(pc, neighbor_pris, pv0);
-        old_mid = pc.mid[pv0];
-        pc.mid[pv0] = newton_pos;
-    } else {
-        newton_pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
+        vert_attrs[v0].pos = get_snap_position(pc, neighbor_pris, pv0);
+        pc.mid[pv0] = vert_attrs[v0].pos;
+        break;
+    case SmoothType::kInteriorNewton:
+        vert_attrs[v0].pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
+        break;
+    case SmoothType::kShellPan:
+        auto new_direction = prism::smoother_direction(
+            pc.base,
+            pc.mid,
+            pc.top,
+            pc.F,
+            pc.ref.aabb->num_freeze,
+            neighbor_pris,
+            {},
+            pv0);
+
+    case SmoothType::kShellRotate:
+    case SmoothType::kShellZoom:
+    case SmoothType::kMax: assert(false); break;
     }
-    vert_attrs[v0].pos = newton_pos;
 
 
     if (pv0 == -1) {
@@ -569,7 +599,7 @@ bool smooth_vertex(
 
         std::vector<std::set<int>> new_tracks;
         std::vector<RowMatd> local_cp;
-        auto flag = prism::local_validity::attempt_zig_remesh(
+        auto flag = attempt_shell_operation(
             pc,
             pc.track_ref,
             option,
@@ -818,7 +848,7 @@ bool collapse_edge(
         // spdlog::trace("moved tris {}", moved_tris);
         std::vector<std::set<int>> new_tracks;
         std::vector<RowMatd> local_cp;
-        auto flag = prism::local_validity::attempt_zig_remesh(
+        auto flag = attempt_shell_operation(
             pc,
             pc.track_ref,
             option,

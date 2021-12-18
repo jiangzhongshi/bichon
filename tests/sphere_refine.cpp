@@ -590,6 +590,8 @@ auto edge_split_pass_with_sizer =
             }
         }
     };
+
+
 TEST_CASE("graded-sphere")
 {
     std::string filename = "../buildr/coarse.h5";
