@@ -165,22 +165,34 @@ auto vertexsmooth_pass =
     [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto sizing) {
         std::vector<bool> snap_flag(pc.mid.size(), false);
         auto total_cnt = 0;
-        {
-            for (auto v0 = 0; v0 < vert_info.size(); v0++) {
-                auto& nb = vert_tet_conn[v0];
-                if (nb.empty()) continue;
-                total_cnt++;
+        for (auto v0 = 0; v0 < vert_info.size(); v0++) {
+            auto& nb = vert_tet_conn[v0];
+            if (nb.empty()) continue;
+            total_cnt++;
+            auto smooth_types =
+                std::vector<prism::tet::SmoothType>{prism::tet::SmoothType::kInteriorNewton};
+            if (vert_info[v0].mid_id != -1)
+                smooth_types = {
+                    prism::tet::SmoothType::kShellPan,
+                    prism::tet::SmoothType::kShellRotate,
+                    prism::tet::SmoothType::kShellZoom,
+                    prism::tet::SmoothType::kSurfaceSnap};
+            for (auto st : smooth_types) {
+                option.target_thickness = sizing;
                 auto flag = prism::tet::smooth_vertex(
                     pc,
                     option,
                     vert_info,
                     tet_info,
                     vert_tet_conn,
+                    st,
                     v0,
                     sizing);
-                if (vert_info[v0].mid_id != -1) {
-                    if (flag) snap_flag[vert_info[v0].mid_id] = true;
+                if (flag && (st == prism::tet::SmoothType::kSurfaceSnap ||
+                             st == prism::tet::SmoothType::kShellPan)) {
+                    snap_flag[vert_info[v0].mid_id] = true;
                 }
+                
             }
         }
         auto cnt_snap = 0;

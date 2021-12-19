@@ -477,7 +477,7 @@ auto get_newton_position = [](const auto& vert_attrs,
     return newton_position_from_stack(assembles);
 };
 
-Vec3d get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
+auto get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
 {
     auto query = [&ref = pc.ref](const Vec3d& s, const Vec3d& t, const std::set<int>& total_trackee)
         -> std::optional<Vec3d> {
@@ -495,8 +495,8 @@ Vec3d get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pr
     for (auto f : neighbor_pris)
         total_trackee.insert(pc.track_ref[f].begin(), pc.track_ref[f].end());
     auto mid_intersect = query(pc.top[v0], pc.base[v0], total_trackee);
-    assert(mid_intersect && "Snap project should succeed.");
-    return mid_intersect.value();
+    // assert(mid_intersect && "Snap project should succeed.");
+    return mid_intersect;
 }
 
 bool smooth_vertex(
@@ -505,32 +505,25 @@ bool smooth_vertex(
     std::vector<VertAttr>& vert_attrs,
     const std::vector<TetAttr>& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
+    SmoothType smooth_type,
     int v0,
     double size_control)
 {
-    enum SmoothType {
-        kSurfaceSnap = 0,
-        kInteriorNewton,
-        kShellZoom,
-        kShellPan,
-        kShellRotate,
-        kMax
-    } smooth_type;
 
-
-    auto& nb = vert_conn[v0];
+    auto& tet_nb = vert_conn[v0];
     const Vec3d old_pos = vert_attrs[v0].pos;
+    auto fmax = Eigen::Map<RowMati>(pc.F[0].data(), pc.F.size(), 3).maxCoeff();
     auto neighbor_pris = std::vector<int>();
     const auto pv0 = vert_attrs[v0].mid_id;
-    for (auto t : nb) {
+    for (auto t : tet_nb) {
         for (auto j = 0; j < 4; j++) {
             auto pid = tet_attrs[t].prism_id[j];
             if (pid != -1 && tet_attrs[t].conn[j] != v0) {
                 neighbor_pris.push_back(pid);
+                assert(pid < pc.F.size());
             }
         }
     }
-
 
     const auto old_pillar = pv0 != -1 ? std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0])
                                       : std::tuple<Vec3d, Vec3d, Vec3d>();
@@ -540,52 +533,80 @@ bool smooth_vertex(
         if (pv0 != -1) std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0]) = old_pillar;
         return false;
     };
-
-
-    switch (smooth_type) {
-    case SmoothType::kSurfaceSnap:
+    if (smooth_type == SmoothType::kInteriorNewton) {
+        assert(neighbor_pris.empty());
+        vert_attrs[v0].pos = get_newton_position(vert_attrs, tet_attrs, tet_nb, v0, old_pos);
+    } else {
         assert(pv0 != -1);
         assert(!neighbor_pris.empty());
-        vert_attrs[v0].pos = get_snap_position(pc, neighbor_pris, pv0);
-        pc.mid[pv0] = vert_attrs[v0].pos;
-        break;
-    case SmoothType::kInteriorNewton:
-        vert_attrs[v0].pos = get_newton_position(vert_attrs, tet_attrs, nb, v0, old_pos);
-        break;
-    case SmoothType::kShellPan:
-        auto new_direction = prism::smoother_direction(
-            pc.base,
-            pc.mid,
-            pc.top,
-            pc.F,
-            pc.ref.aabb->num_freeze,
-            neighbor_pris,
-            {},
-            pv0);
 
-    case SmoothType::kShellRotate:
-    case SmoothType::kShellZoom:
-    case SmoothType::kMax: assert(false); break;
+        auto nbi = std::vector<int>(neighbor_pris.size());
+        for (auto i = 0; i < nbi.size(); i++) nbi[i] = id_in_array(pc.F[neighbor_pris[i]], pv0);
+        bool snap_mid =
+            (smooth_type == SmoothType::kSurfaceSnap || smooth_type == SmoothType::kShellPan);
+        if (smooth_type == SmoothType::kShellPan) {
+            auto new_direction = prism::smoother_direction(
+                pc.base,
+                pc.mid,
+                pc.top,
+                pc.F,
+                pc.ref.aabb->num_freeze,
+                neighbor_pris,
+                nbi,
+                pv0);
+            if (!new_direction) {
+                spdlog::trace("No better location.");
+                return rollback();
+            }
+
+            std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0]) = std::tie(
+                pc.base[pv0] + new_direction.value(),
+                pc.mid[pv0] + new_direction.value(),
+                pc.top[pv0] + new_direction.value());
+            // followed by snap.
+        }
+        if (snap_mid) {
+            auto snapped = get_snap_position(pc, neighbor_pris, pv0);
+            if (!snapped) {
+                assert(smooth_type != SmoothType::kSurfaceSnap);
+                spdlog::trace("No pan.");
+                return rollback();
+            }
+            vert_attrs[v0].pos = snapped.value();
+            pc.mid[pv0] = vert_attrs[v0].pos;
+        } else {
+            assert(
+                smooth_type == SmoothType::kShellZoom || smooth_type == SmoothType::kShellRotate);
+            auto func = prism::zoom;
+            if (smooth_type == SmoothType::kShellRotate) func = prism::rotate;
+            auto great_prism =
+                func(pc.base, pc.mid, pc.top, pc.F, neighbor_pris, nbi, pv0, option.target_thickness);
+            if (!great_prism) {
+                spdlog::trace("No better prism.");
+                return rollback();
+            }
+            std::tie(pc.base[pv0], pc.top[pv0]) = great_prism.value();
+        }
     }
 
 
     if (pv0 == -1) {
         // Consider size only when internal. TODO: figure out priority of snapping vs size.
-        auto old_tets = std::vector<Vec4i>(nb.size());
-        for (auto i = 0; i < nb.size(); i++) old_tets[i] = tet_attrs[nb[i]].conn;
+        auto old_tets = std::vector<Vec4i>(tet_nb.size());
+        for (auto i = 0; i < tet_nb.size(); i++) old_tets[i] = tet_attrs[tet_nb[i]].conn;
         auto after_size = max_tetra_sizes(vert_attrs, old_tets);
         if (after_size > size_control) return rollback();
     }
-    for (auto ti : nb) {
+    for (auto ti : tet_nb) {
         auto& t = tet_attrs[ti].conn;
         if (!tetra_validity(vert_attrs, t)) {
             return rollback();
         }
     }
 
-    if (pv0 != -1) { // boundary, attempt
+    if (pv0 != -1) { // boundary, shell attempt
         auto old_fids = std::vector<int>();
-        for (auto t : nb) {
+        for (auto t : tet_nb) {
             auto& t_a = tet_attrs[t];
             for (auto j = 0; j < 4; j++) {
                 if (t_a.prism_id[j] != -1 && t_a.conn[j] != v0) { // not opposite

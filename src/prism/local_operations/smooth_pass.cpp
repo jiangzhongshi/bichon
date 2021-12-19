@@ -32,14 +32,12 @@ int smooth_prism(PrismCage &pc, int vid,
   std::optional<std::pair<Vec3d, Vec3d>> great_prism;
   spdlog::trace("zoom or rotate for vid {}", vid);
   if (true_zoom_false_rotate) {
-    great_prism = zoom(pc.base, pc.mid, pc.top, pc.F, VF, VFi, vid,
+    great_prism = zoom(pc.base, pc.mid, pc.top, pc.F, VF[vid], VFi[vid], vid,
                        option.target_thickness);
   } else
-    great_prism = rotate(pc.base, pc.mid, pc.top, pc.F, VF, VFi, vid,
+    great_prism = rotate(pc.base, pc.mid, pc.top, pc.F, VF[vid], VFi[vid], vid,
                          option.target_thickness);
-  // great_prism =
-  // zoom_and_rotate(pc.base, pc.mid, pc.top, pc.F, pc.ref.aabb->num_freeze, VF,
-  // VFi, vid, target_thick);
+                         
   if (!great_prism) {
     spdlog::debug("Zoom and Rotate failed.");
     return 1;
@@ -98,7 +96,7 @@ int smooth_single(PrismCage &pc, int vid,
 
   spdlog::trace("smooth attempt: {}", vid);
   auto new_direction = prism::smoother_direction(
-      pc.base, pc.mid, pc.top, pc.F, pc.ref.aabb->num_freeze, VF, VFi, vid);
+      pc.base, pc.mid, pc.top, pc.F, pc.ref.aabb->num_freeze, VF[vid], VFi[vid], vid);
 
   if (!new_direction) {
     spdlog::trace("No better location.");

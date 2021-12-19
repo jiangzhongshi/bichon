@@ -78,9 +78,8 @@ double prism::get_min_step_to_singularity(
 std::optional<Vec3d> prism::smoother_direction(
     const std::vector<Vec3d>& base, const std::vector<Vec3d>& mid,
     const std::vector<Vec3d>& top, const std::vector<Vec3i>& F, int num_freeze,
-    const std::vector<std::vector<int>>& VF,
-    const std::vector<std::vector<int>>& VFi, int vid) {
-  auto nb = VF[vid], nbi = VFi[vid];
+    const std::vector<int>& nb,
+    const std::vector<int>& nbi, int vid) {
   auto [old_quality, grad] =
       prism::energy::triangle_one_ring_quality(mid, F, nb, nbi, true);
   grad *= -1;  //  descent
@@ -108,8 +107,8 @@ std::optional<Vec3d> prism::smoother_direction(
 std::optional<std::pair<Vec3d, Vec3d>> prism::zoom_and_rotate(
     const std::vector<Vec3d>& base, const std::vector<Vec3d>& mid,
     const std::vector<Vec3d>& top, const std::vector<Vec3i>& F, int num_freeze,
-    const std::vector<std::vector<int>>& VF,
-    const std::vector<std::vector<int>>& VFi, int vid, double target_height) {
+    const std::vector<int>& nb,
+    const std::vector<int>& nbi, int vid, double target_height) {
   // MPGA: Zoom and Rotate, to optimize shell quality.
   // a (M-T) = B-T
   // B = a M + (1-a) T, a>1
@@ -117,7 +116,6 @@ std::optional<std::pair<Vec3d, Vec3d>> prism::zoom_and_rotate(
   // d(Qt + Qb) = (dQt/dT) dT + (dQb/dB) ((M - T) da + (1-a) dT)
   // dQ/da = (dQb/dB)'(M - T)
   // dQ/dT = (dQt/dT) + (1-a)(dQb/dB)
-  auto nb = VF[vid], nbi = VFi[vid];
   std::vector<double> mid_areas(nb.size(), 0.1);
   auto [base_quality, base_grad] = prism::energy::prism_one_ring_quality(
       base, mid, F, nb, nbi, target_height, mid_areas, true, vid);
@@ -169,9 +167,8 @@ std::optional<std::pair<Vec3d, Vec3d>> prism::zoom_and_rotate(
 std::optional<std::pair<Vec3d, Vec3d>> prism::rotate(
     const std::vector<Vec3d>& base, const std::vector<Vec3d>& mid,
     const std::vector<Vec3d>& top, const std::vector<Vec3i>& F,
-    const std::vector<std::vector<int>>& VF,
-    const std::vector<std::vector<int>>& VFi, int vid, double _) {
-  auto nb = VF[vid], nbi = VFi[vid];
+    const std::vector<int>& nb,
+    const std::vector<int>& nbi, int vid, double _) {
   Vec3d qp_normal(0, 0, 0);
   // {
   //   RowMatd FN(nb.size(), 3);
@@ -202,10 +199,9 @@ std::optional<std::pair<Vec3d, Vec3d>> prism::rotate(
 std::optional<std::pair<Vec3d, Vec3d>> prism::zoom(
     const std::vector<Vec3d>& base, const std::vector<Vec3d>& mid,
     const std::vector<Vec3d>& top, const std::vector<Vec3i>& F,
-    const std::vector<std::vector<int>>& VF,
-    const std::vector<std::vector<int>>& VFi, int vid,
+    const std::vector<int>& nb,
+    const std::vector<int>& nbi, int vid,
     double target_thickness) {
-  auto nb = VF[vid], nbi = VFi[vid];
   double target_base = 0, target_top = 0;
   int nb_num = nb.size();
   for (int i = 0; i < nb.size(); i++) {

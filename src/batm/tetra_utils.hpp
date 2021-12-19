@@ -18,6 +18,15 @@ struct RemeshOptions;
  */
 namespace prism::tet {
 
+enum class SmoothType {
+    kSurfaceSnap = 0,
+    kInteriorNewton,
+    kShellZoom,
+    kShellPan,
+    kShellRotate,
+    kMax
+};
+
 struct SizeController
 {
     std::shared_ptr<prism::geogram::AABB_tet> bg_tree;
@@ -74,6 +83,7 @@ bool smooth_vertex(
     std::vector<VertAttr>& vert_attrs,
     const std::vector<TetAttr>& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
+    SmoothType smooth_type,
     int v0,
     double size_control);
 
