@@ -76,6 +76,7 @@ endif()
 
 add_library(batm_library
           batm/tetra_utils.cpp
+          batm/tetra_logger.cpp
           batm/tetra_quality.cpp
           batm/tetra_size_control.cpp
           batm/AMIPS.cpp

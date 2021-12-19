@@ -23,6 +23,19 @@ double tetra_quality(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Ve
     return wmtk::AMIPS_energy(T);
 }
 
+double diameter2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3)
+{
+    // max of six edges
+    auto max_diam = std::max(
+        {(p0 - p1).squaredNorm(),
+         (p0 - p2).squaredNorm(),
+         (p0 - p3).squaredNorm(),
+         (p1 - p2).squaredNorm(),
+         (p1 - p3).squaredNorm(),
+         (p2 - p3).squaredNorm()});
+    return max_diam;
+}
+
 double circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3)
 {
     std::array<GEO::vec3, 4> geo_v;

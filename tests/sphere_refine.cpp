@@ -5,9 +5,11 @@
 #include <igl/barycenter.h>
 #include <igl/combine.h>
 #include <igl/read_triangle_mesh.h>
+#include <igl/volume.h>
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+#include <batm/tetra_logger.hpp>
 
 #include <algorithm>
 #include <batm/tetra_utils.hpp>
@@ -187,7 +189,7 @@ auto vertexsmooth_pass =
                     vert_tet_conn,
                     st,
                     v0,
-                    sizing);
+                    1.0);
                 if (flag && (st == prism::tet::SmoothType::kSurfaceSnap ||
                              st == prism::tet::SmoothType::kShellPan)) {
                     snap_flag[vert_info[v0].mid_id] = true;
@@ -234,7 +236,7 @@ auto serializer = [](std::string filename, auto& pc, auto& vert_info, auto& tet_
                 Eigen::VectorXd S(T.rows());
                 auto Q = S;
                 for (auto i = 0; i < T.rows(); i++) {
-                    S[i] = prism::tet::circumradi2(
+                    S[i] = prism::tet::diameter2(
                         V.row(T(i, 0)),
                         V.row(T(i, 1)),
                         V.row(T(i, 2)),
@@ -530,43 +532,68 @@ TEST_CASE("sphere-coarsen-aggresive")
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, &pc);
         option.target_adjustment.resize(pc.mid.size());
     }
+    REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc));
     serializer("../buildr/coarse.h5", pc, vert_info, tet_info);
+
+    {
+        std::string filename = "../buildr/coarse.h5";
+        PrismCage pc(filename);
+        auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
+        prism::local::RemeshOptions option(pc.mid.size(), 0.1);
+        REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc));
+    }
 }
 
 auto edge_split_pass_with_sizer =
     [](auto& pc, auto& option, auto& vert_info, auto& tet_info, auto& vert_tet_conn, auto& sizer) {
-        auto oversize = [](const auto& vert_info, const auto& tet, const auto& sizer) {
+        auto size_condition =
+            [](const auto& vert_info, const auto& tet, const auto& sizer) -> double {
+            // return 0.1;
             std::array<Vec3d, 4> stack_pos;
             for (auto j = 0; j < 4; j++) {
                 stack_pos[j] = vert_info[tet[j]].pos;
             }
             auto cur_size =
-                prism::tet::circumradi2(stack_pos[0], stack_pos[1], stack_pos[2], stack_pos[3]);
+                prism::tet::diameter2(stack_pos[0], stack_pos[1], stack_pos[2], stack_pos[3]);
             auto size_con = sizer->find_size_bound(stack_pos);
-            return size_con < cur_size;
+            return size_con;
         };
 
         // split_pass();
-        std::vector<bool> split_due(tet_info.size(), false);
+        std::vector<double> split_due(tet_info.size(), 1.);
 
         for (auto i = 0; i < tet_info.size(); i++) {
             if (tet_info[i].is_removed) continue;
-            if (oversize(vert_info, tet_info[i].conn, sizer)) split_due[i] = true;
+            split_due[i] = size_condition(vert_info, tet_info[i].conn, sizer);
         }
         assert(split_due.size() == tet_info.size());
 
         auto queue = construct_edge_queue(vert_info, tet_info);
         auto timestamp = 0;
         REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc));
+        auto minimum_edge = [&]() {
+            auto mini = 1.0;
+            auto local_edges =
+                std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+            for (auto i = 0; i < tet_info.size(); i++) {
+                auto conn = tet_info[i].conn;
+                for (auto [v0, v1] : local_edges) {
+                    mini = std::min(
+                        mini,
+                        (vert_info[conn[v0]].pos - vert_info[conn[v1]].pos).squaredNorm());
+                }
+            }
+            return mini;
+        };
         while (!queue.empty()) {
             auto [len, v0, v1] = queue.top();
             queue.pop();
             if ((vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
             auto nb = set_inter(vert_tet_conn[v0], vert_tet_conn[v1]);
             if (nb.empty()) continue;
-            auto size_due = [&nb, &split_due]() {
+            auto size_due = [&nb, &len = len, &split_due]() {
                 for (auto s : nb) {
-                    if (split_due[s]) return true;
+                    if (split_due[s] < len) return true;
                 }
                 return false;
             }();
@@ -574,31 +601,46 @@ auto edge_split_pass_with_sizer =
             if (!size_due) continue;
             auto old_tid = tet_info.size();
             ////// edge splitting
-            prism::tet::split_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1);
+            // spdlog::trace(
+            //     "[{}] len {} v{}-{} #T{} #F{}: MIN {}",
+            //     timestamp,
+            //     len,
+            //     v0,
+            //     v1,
+            //     tet_info.size(),
+            //     pc.F.size(),
+            //     minimum_edge());
+            auto suc =
+                prism::tet::split_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1);
+            if (!suc) continue;
             auto new_tid = std::vector<int>();
             for (auto i = old_tid; i < tet_info.size(); i++) {
                 new_tid.push_back(i);
             }
-            split_due.resize(tet_info.size(), false);
+            split_due.resize(tet_info.size(), 1.0);
 
-            auto local_edges =
-                std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
-            auto edge_set = std::set<std::tuple<int, int>>();
+            // auto local_edges =
+            // std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+            // auto edge_set = std::set<std::tuple<int, int>>();
             for (auto i : new_tid) {
                 auto& tet = tet_info[i];
-                for (auto e : local_edges) {
-                    auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-                    edge_set.emplace(std::min(v0, v1), std::max(v0, v1));
-                }
-                if (oversize(vert_info, tet_info[i].conn, sizer)) split_due[i] = true;
+                auto size_con = (size_condition(vert_info, tet_info[i].conn, sizer));
+                split_due[i] = size_con;
+                //     for (auto e : local_edges) {
+                //         auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
+                //         auto len2 = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
+                //         if (len2 > size_con) edge_set.emplace(std::min(v0, v1), std::max(v0,
+                //         v1));
+                //     }
             }
-            for (auto [v0, v1] : edge_set) {
-                auto len = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
-                queue.emplace(len, v0, v1);
-            }
+            // for (auto [v0, v1] : edge_set) {
+            //     auto len2 = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
+            //     queue.emplace(len2, v0, v1);
+            // }
             timestamp++;
-            if (timestamp % 1000 == 0) {
+            if (timestamp % 100 == 0) {
                 spdlog::info("Split Going {}", timestamp);
+                serializer("../buildr/split_temp.h5", pc, vert_info, tet_info);
             }
         }
     };
@@ -610,6 +652,7 @@ TEST_CASE("graded-sphere")
     PrismCage pc(filename);
     auto [vert_info, tet_info, vert_tet_conn] = reload(filename, pc);
     prism::local::RemeshOptions option(pc.mid.size(), 0.1);
+    prism::tet::logger().enable_backtrace(100);
 
     auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
     {
@@ -625,10 +668,15 @@ TEST_CASE("graded-sphere")
             if (BC(i, 0) > 0.5) sizes[i] = 1.0;
             if (BC(i, 0) < 0.2) sizes[i] = 5e-3;
         }
+        sizes.setConstant(1e-2);
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
 
-    edge_split_pass_with_sizer(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
-
+    for (auto i = 0; i < 1; i++) {
+        edge_split_pass_with_sizer(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
+        // vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1e-2);
+        // edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
+        prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, &pc);
+    }
     serializer("../buildr/split_once.h5", pc, vert_info, tet_info);
 }
