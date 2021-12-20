@@ -17,11 +17,11 @@ namespace prism::tet
 	// See https://github.com/gabime/spdlog#asynchronous-logger-with-multi-sinks
 	void Logger::init(std::vector<spdlog::sink_ptr> &sinks)
 	{
-		auto l = spdlog::get("prism-tet");
-		bool had_tet = l != nullptr;
-		if (had_tet)
+		auto l = spdlog::get("AMR");
+		bool exist = l != nullptr;
+		if (exist)
 		{
-			spdlog::drop("prism-tet");
+			spdlog::drop("AMR");
 		}
 
 		if (spdlog::thread_pool() == nullptr)
@@ -30,13 +30,13 @@ namespace prism::tet
 		}
 		Logger::logger_ =
 			std::make_shared<spdlog::async_logger>(
-				"prism-tet",
+				"AMR",
 				sinks.begin(), sinks.end(),
 				spdlog::thread_pool(), spdlog::async_overflow_policy::block);
 		spdlog::register_logger(logger_);
 
-		if (had_tet)
-			logger().warn("Removed another prism-tet logger");
+		if (exist)
+			logger().warn("Shadowed previous AMR logger");
 	}
 
 	void Logger::init(bool use_cout, const std::string &filename, bool truncate)

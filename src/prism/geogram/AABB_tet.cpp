@@ -86,7 +86,6 @@ std::vector<size_t> prism::geogram::AABB_tet::overlap_tetra(const std::array<Vec
           g_tetra[k] = Vec3d(pt.x, pt.y, pt.z);
         }
         if (prism::predicates::tetrahedron_tetrahedron_overlap(g_tetra, P)) {
-          spdlog::trace("found overlap tetra");
           result.push_back(face_map[cell_id]);
         }
     };

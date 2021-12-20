@@ -352,7 +352,7 @@ bool split_edge(
     auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
     assert(!affected.empty());
-    prism::tet::logger().debug("Splitting... {} {}", v0, v1);
+    prism::tet::logger().debug(">>> Splitting {} {}", v0, v1);
     const auto vx = vert_attrs.size();
 
     std::vector<Vec4i> new_tets;
@@ -398,7 +398,7 @@ bool split_edge(
 
     for (auto t : new_tets) { // Vec4i
         if (!tetra_validity(vert_attrs, t)) {
-            prism::tet::logger().debug("Split Fail");
+            prism::tet::logger().debug("<<<< Split Fail with Tetra Validity");
             return rollback();
         }
     }
@@ -423,12 +423,15 @@ bool split_edge(
             pc,
             pc.track_ref,
             option,
-            -1,
+            1e10,
             old_fids,
             moved_tris,
             new_tracks,
             local_cp);
-        if (flag != 0) return rollback();
+        if (flag != 0) {
+            prism::tet::logger().debug("<<<<< Split Fail for Shell <{}>", flag);
+            return rollback();
+        }
 
         // distribute and assign new_tracks.
         new_fid = {f0, f1, int(F.size()), int(F.size() + 1)};
@@ -527,6 +530,7 @@ bool smooth_vertex(
     int v0,
     double size_control)
 {
+    prism::tet::logger().debug(">>>> Smooth Vertex {} type {}", v0, smooth_type);
 
     auto& tet_nb = vert_conn[v0];
     const Vec3d old_pos = vert_attrs[v0].pos;
@@ -573,7 +577,7 @@ bool smooth_vertex(
                 nbi,
                 pv0);
             if (!new_direction) {
-                prism::tet::logger().trace("No better location.");
+                prism::tet::logger().debug("No better location.");
                 return rollback();
             }
 
@@ -584,10 +588,11 @@ bool smooth_vertex(
             // followed by snap.
         }
         if (snap_mid) {
+            prism::tet::logger().debug("Snapping...");
             auto snapped = get_snap_position(pc, neighbor_pris, pv0);
             if (!snapped) {
                 assert(smooth_type != SmoothType::kSurfaceSnap);
-                prism::tet::logger().trace("No pan.");
+                prism::tet::logger().debug("No pan.");
                 return rollback();
             }
             vert_attrs[v0].pos = snapped.value();
@@ -600,7 +605,7 @@ bool smooth_vertex(
             auto great_prism =
                 func(pc.base, pc.mid, pc.top, pc.F, neighbor_pris, nbi, pv0, option.target_thickness);
             if (!great_prism) {
-                prism::tet::logger().trace("No better prism.");
+                prism::tet::logger().debug("No better prism.");
                 return rollback();
             }
             std::tie(pc.base[pv0], pc.top[pv0]) = great_prism.value();
@@ -618,6 +623,7 @@ bool smooth_vertex(
     for (auto ti : tet_nb) {
         auto& t = tet_attrs[ti].conn;
         if (!tetra_validity(vert_attrs, t)) {
+            prism::tet::logger().debug("<<<< Validity");
             return rollback();
         }
     }
@@ -647,7 +653,10 @@ bool smooth_vertex(
             moved_tris,
             new_tracks,
             local_cp);
-        if (flag != 0) return rollback();
+        if (flag != 0) {
+            prism::tet::logger().debug("<<<< Shell Failure <{}>", flag);
+            return rollback();
+        }
         update_pc(pc, old_fids, old_fids, moved_tris, new_tracks);
     }
 
