@@ -367,7 +367,8 @@ bool split_edge(
     const int p_vx = bnd_pris.empty() ? -1 : pc.mid.size();
 
     vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2)});
-    prism::tet::logger().trace("{}& {} -> {}", vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
+    prism::tet::logger()
+        .trace("{}& {} -> {}", vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
     auto rollback = [&]() {
         vert_attrs.pop_back();
         if (p_vx != -1) {
@@ -515,7 +516,8 @@ auto get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pri
     std::set<int> total_trackee;
     for (auto f : neighbor_pris)
         total_trackee.insert(pc.track_ref[f].begin(), pc.track_ref[f].end());
-    auto mid_intersect = query(pc.top[v0], pc.base[v0], total_trackee);
+    auto mid_intersect = query(pc.top[v0], pc.mid[v0], total_trackee);
+    if (!mid_intersect) mid_intersect = query(pc.base[v0], pc.mid[v0], total_trackee);
     // assert(mid_intersect && "Snap project should succeed.");
     return mid_intersect;
 }
@@ -530,6 +532,7 @@ bool smooth_vertex(
     int v0,
     double size_control)
 {
+    const auto kSmoothRepeatCount = 5;
     prism::tet::logger().debug(">>>> Smooth Vertex {} type {}", v0, smooth_type);
 
     auto& tet_nb = vert_conn[v0];
@@ -555,9 +558,12 @@ bool smooth_vertex(
         if (pv0 != -1) std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0]) = old_pillar;
         return false;
     };
+    auto new_directions =
+        std::tuple<Vec3d, Vec3d, Vec3d>(Vec3d::Zero(), Vec3d::Zero(), Vec3d::Zero());
     if (smooth_type == SmoothType::kInteriorNewton) {
         assert(neighbor_pris.empty());
-        vert_attrs[v0].pos = get_newton_position(vert_attrs, tet_attrs, tet_nb, v0, old_pos);
+        auto new_pos = get_newton_position(vert_attrs, tet_attrs, tet_nb, v0, old_pos);
+        std::get<1>(new_directions) = new_pos - old_pos;
     } else {
         assert(pv0 != -1);
         assert(!neighbor_pris.empty());
@@ -581,10 +587,8 @@ bool smooth_vertex(
                 return rollback();
             }
 
-            std::tie(pc.base[pv0], pc.mid[pv0], pc.top[pv0]) = std::tie(
-                pc.base[pv0] + new_direction.value(),
-                pc.mid[pv0] + new_direction.value(),
-                pc.top[pv0] + new_direction.value());
+            new_directions =
+                std::tie(new_direction.value(), new_direction.value(), new_direction.value());
             // followed by snap.
         }
         if (snap_mid) {
@@ -595,69 +599,102 @@ bool smooth_vertex(
                 prism::tet::logger().debug("No pan.");
                 return rollback();
             }
-            vert_attrs[v0].pos = snapped.value();
-            pc.mid[pv0] = vert_attrs[v0].pos;
+            std::get<1>(new_directions) = snapped.value() - old_pos;
         } else {
             assert(
                 smooth_type == SmoothType::kShellZoom || smooth_type == SmoothType::kShellRotate);
             auto func = prism::zoom;
             if (smooth_type == SmoothType::kShellRotate) func = prism::rotate;
-            auto great_prism =
-                func(pc.base, pc.mid, pc.top, pc.F, neighbor_pris, nbi, pv0, option.target_thickness);
+            auto great_prism = func(
+                pc.base,
+                pc.mid,
+                pc.top,
+                pc.F,
+                neighbor_pris,
+                nbi,
+                pv0,
+                option.target_thickness);
             if (!great_prism) {
                 prism::tet::logger().debug("No better prism.");
                 return rollback();
             }
-            std::tie(pc.base[pv0], pc.top[pv0]) = great_prism.value();
+            auto [base_val, top_val] = great_prism.value();
+            new_directions = std::tie(base_val - pc.base[pv0], Vec3d::Zero(), top_val - pc.top[pv0]);
         }
     }
-
-
-    if (pv0 == -1) {
-        // Consider size only when internal. TODO: figure out priority of snapping vs size.
-        auto old_tets = std::vector<Vec4i>(tet_nb.size());
-        for (auto i = 0; i < tet_nb.size(); i++) old_tets[i] = tet_attrs[tet_nb[i]].conn;
-        auto after_size = max_tetra_sizes(vert_attrs, old_tets);
-        if (after_size > size_control) return rollback();
-    }
-    for (auto ti : tet_nb) {
-        auto& t = tet_attrs[ti].conn;
-        if (!tetra_validity(vert_attrs, t)) {
-            prism::tet::logger().debug("<<<< Validity");
-            return rollback();
-        }
+    if (std::get<1>(new_directions).squaredNorm() + std::get<0>(new_directions).squaredNorm() +
+            std::get<2>(new_directions).squaredNorm() ==
+        0) {
+        prism::tet::logger().debug("Not Moving, {}", smooth_type);
+        return false;
     }
 
-    if (pv0 != -1) { // boundary, shell attempt
-        auto old_fids = std::vector<int>();
-        for (auto t : tet_nb) {
-            auto& t_a = tet_attrs[t];
-            for (auto j = 0; j < 4; j++) {
-                if (t_a.prism_id[j] != -1 && t_a.conn[j] != v0) { // not opposite
-                    old_fids.push_back(t_a.prism_id[j]);
+    // test a direction
+    auto attempt_direction =
+        [&rollback, &tet_nb, pv0, v0, &tet_attrs, &size_control, &vert_attrs, &pc, &option](
+            const auto& new_directions) {
+            vert_attrs[v0].pos = vert_attrs[v0].pos + std::get<1>(new_directions);
+            if (pv0 == -1) {
+                // Consider size only when internal. TODO: figure out priority of snapping vs
+                // size.
+                auto old_tets = std::vector<Vec4i>(tet_nb.size());
+                for (auto i = 0; i < tet_nb.size(); i++) old_tets[i] = tet_attrs[tet_nb[i]].conn;
+                auto after_size = max_tetra_sizes(vert_attrs, old_tets);
+                if (after_size > size_control) return rollback();
+            }
+            for (auto ti : tet_nb) {
+                auto& t = tet_attrs[ti].conn;
+                if (!tetra_validity(vert_attrs, t)) {
+                    prism::tet::logger().debug("<<<< Validity");
+                    return rollback();
                 }
             }
-        }
-        assert(!old_fids.empty());
-        auto moved_tris = std::vector<Vec3i>();
-        for (auto f : old_fids) moved_tris.emplace_back(pc.F[f]);
 
-        std::vector<std::set<int>> new_tracks;
-        std::vector<RowMatd> local_cp;
-        auto flag = attempt_shell_operation(
-            pc,
-            pc.track_ref,
-            option,
-            1e10, // TODO: smoothing tet already captured energy, no guard here.
-            old_fids,
-            moved_tris,
-            new_tracks,
-            local_cp);
-        if (flag != 0) {
-            prism::tet::logger().debug("<<<< Shell Failure <{}>", flag);
-            return rollback();
+            if (pv0 != -1) { // boundary, shell attempt
+                pc.base[pv0] += std::get<0>(new_directions);
+                pc.mid[pv0] += std::get<1>(new_directions);
+                pc.top[pv0] += std::get<2>(new_directions);
+                auto old_fids = std::vector<int>();
+                for (auto t : tet_nb) {
+                    auto& t_a = tet_attrs[t];
+                    for (auto j = 0; j < 4; j++) {
+                        if (t_a.prism_id[j] != -1 && t_a.conn[j] != v0) { // not opposite
+                            old_fids.push_back(t_a.prism_id[j]);
+                        }
+                    }
+                }
+                assert(!old_fids.empty());
+                auto moved_tris = std::vector<Vec3i>();
+                for (auto f : old_fids) moved_tris.emplace_back(pc.F[f]);
+
+                std::vector<std::set<int>> new_tracks;
+                std::vector<RowMatd> local_cp;
+                auto flag = attempt_shell_operation(
+                    pc,
+                    pc.track_ref,
+                    option,
+                    1e10, // TODO: smoothing tet already captured energy, no guard here.
+                    old_fids,
+                    moved_tris,
+                    new_tracks,
+                    local_cp);
+                if (flag != 0) {
+                    prism::tet::logger().debug("<<<< Shell Failure <{}>", flag);
+                    return rollback();
+                }
+                update_pc(pc, old_fids, old_fids, moved_tris, new_tracks);
+            }
+            return true;
+        };
+    for (auto repeat = 0; repeat < kSmoothRepeatCount; repeat++) {
+        auto flag = attempt_direction(new_directions);
+        if (!flag) {
+            std::get<0>(new_directions) = std::get<0>(new_directions) / 2;
+            std::get<1>(new_directions) = std::get<1>(new_directions) / 2;
+            std::get<2>(new_directions) = std::get<2>(new_directions) / 2;
+            continue;
         }
-        update_pc(pc, old_fids, old_fids, moved_tris, new_tracks);
+        break;
     }
 
     prism::tet::logger().trace("Vertex Snapped!!");
@@ -671,6 +708,7 @@ bool tetmesh_sanity(
     const std::vector<std::vector<int>>& vert_tet_conn,
     const PrismCage& pc)
 {
+    return true;
     for (auto& tet : tet_attrs) {
         if (tet.is_removed) continue;
         if (!tetra_validity(vert_attrs, tet.conn)) {
@@ -759,12 +797,8 @@ bool tetmesh_sanity(
         assert(v.mid_id < int(pc.mid.size()));
         if (v.mid_id != -1) {
             if (v.pos != pc.mid[v.mid_id]) {
-                prism::tet::logger().critical(
-                    "pos[{}] ({}) != mid[{}] ({})",
-                    i,
-                    v.pos,
-                    v.mid_id,
-                    pc.mid[v.mid_id]);
+                prism::tet::logger()
+                    .critical("pos[{}] ({}) != mid[{}] ({})", i, v.pos, v.mid_id, pc.mid[v.mid_id]);
                 return false;
             }
         }
@@ -853,7 +887,8 @@ bool collapse_edge(
     auto nb_pids = [&vert_conn, &tet_attrs](auto v_id) {
         auto nb = std::vector<int>();
         for (auto t : vert_conn[v_id]) {
-            // prism::tet::logger().trace("conn {} \t {}", tet_attrs[t].conn, tet_attrs[t].prism_id);
+            // prism::tet::logger().trace("conn {} \t {}", tet_attrs[t].conn,
+            // tet_attrs[t].prism_id);
             assert(tet_attrs[t].is_removed == false);
             for (auto j = 0; j < 4; j++) {
                 auto pid = tet_attrs[t].prism_id[j];
@@ -882,7 +917,8 @@ bool collapse_edge(
             std::vector<int> new_fid, old_fid;
             for (auto f : neighbor0) {
                 auto new_tris = F[f];
-                prism::tet::logger().trace("newtris [{},{},{}],", new_tris[0], new_tris[1], new_tris[2]);
+                prism::tet::logger()
+                    .trace("newtris [{},{},{}],", new_tris[0], new_tris[1], new_tris[2]);
                 assert(new_tris[0] != -1);
                 old_fid.push_back(f);
                 if (id_in_array(new_tris, u1) != -1) continue; // collapsed faces
