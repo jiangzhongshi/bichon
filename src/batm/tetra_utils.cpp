@@ -17,6 +17,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cassert>
+#include <highfive/H5Easy.hpp>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -33,11 +34,7 @@ void require(bool cond, std::string msg)
 {
     if (!cond) abort_and_debug(msg);
 }
-auto set_inter = [](auto& A, auto& B) {
-    std::vector<int> vec;
-    std::set_intersection(A.begin(), A.end(), B.begin(), B.end(), std::back_inserter(vec));
-    return vec;
-};
+
 
 auto set_insert = [](auto& A, auto& a) {
     auto it = std::lower_bound(A.begin(), A.end(), a);
@@ -619,7 +616,8 @@ bool smooth_vertex(
                 return rollback();
             }
             auto [base_val, top_val] = great_prism.value();
-            new_directions = std::tie(base_val - pc.base[pv0], Vec3d::Zero(), top_val - pc.top[pv0]);
+            new_directions =
+                std::tie(base_val - pc.base[pv0], Vec3d::Zero(), top_val - pc.top[pv0]);
         }
     }
     if (std::get<1>(new_directions).squaredNorm() + std::get<0>(new_directions).squaredNorm() +
@@ -829,6 +827,7 @@ bool collapse_edge(
 
     assert(!set_inter(nb1, nb2).empty());
     if (vert_attrs[v1_id].mid_id != -1 && vert_attrs[v2_id].mid_id == -1) {
+        prism::tet::logger().debug("Not from surface to interior");
         return false; // TODO: erase v1, and assign its prism tracker to v2.
     }
 
@@ -871,12 +870,20 @@ bool collapse_edge(
     }
 
     auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality)
+    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality) {
+        prism::tet::logger().trace("Quality reject.");
         return false;
+    }
     auto after_size = max_tetra_sizes(vert_attrs, new_tets);
-    if (after_size > size_control) return false;
+    if (after_size > size_control) {
+        prism::tet::logger().trace("Size reject.");
+        return false;
+    }
     for (auto t : new_tets) {
-        if (!tetra_validity(vert_attrs, t)) return false;
+        if (!tetra_validity(vert_attrs, t)) {
+            prism::tet::logger().trace("Tet Invert.");
+            return false;
+        }
     }
     for (auto f : bnd_faces) {
         assert(pc.F[f][0] != -1);
@@ -943,7 +950,10 @@ bool collapse_edge(
             moved_tris,
             new_tracks,
             local_cp);
-        if (flag != 0) return rollback();
+        if (flag != 0) {
+            prism::tet::logger().debug("<<<<< Collapse Fail for Shell Reason <{}>", flag);
+            return rollback();
+        }
 
         update_pc(pc, old_fid, new_fid, moved_tris, new_tracks);
         vert_attrs[v1_id].mid_id = vert_attrs[v2_id].mid_id;
@@ -956,6 +966,7 @@ bool collapse_edge(
     vert_attrs[v1_id].mid_id = -1;
 
     if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
+    prism::tet::logger().debug("|||| Successful Collapse");
 
     return true;
 }
@@ -1152,5 +1163,26 @@ void compact_tetmesh(
         }
     }
 }
+
+
+std::tuple<
+    std::vector<prism::tet::VertAttr>,
+    std::vector<prism::tet::TetAttr>,
+    std::vector<std::vector<int>>>
+reload(std::string filename, const PrismCage& pc)
+{
+    H5Easy::File file(filename, H5Easy::File::ReadOnly);
+    auto tet_v = H5Easy::load<RowMatd>(file, "tet_v");
+    auto tet_t = H5Easy::load<RowMati>(file, "tet_t");
+    Eigen::VectorXi tet_v_pid = -Eigen::VectorXi::Ones(tet_v.rows());
+    if (file.exist("tet_v_pid")) {
+        tet_v_pid = H5Easy::load<Eigen::VectorXi>(file, "tet_v_pid");
+    } else {
+        for (auto i = 0; i < pc.mid.size(); i++) tet_v_pid[i] = i;
+        spdlog::info("Initial Loading, no vid pointer");
+    }
+    spdlog::info("Loading v {}, t {} ", tet_v.rows(), tet_t.rows());
+    return prism::tet::prepare_tet_info(pc, tet_v, tet_t, tet_v_pid);
+};
 
 } // namespace prism::tet

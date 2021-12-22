@@ -197,6 +197,13 @@ constexpr auto non_empty_intersect = [](auto& A, auto& B) {
   return !vec.empty();
 };
 
+constexpr auto set_inter = [](auto& A, auto& B) {
+    std::vector<int> vec;
+    std::set_intersection(A.begin(), A.end(), B.begin(), B.end(), std::back_inserter(vec));
+    return vec;
+};
+
+
 constexpr auto set_minus = [](const auto &A, const auto &B, auto &C) {
   std::set_difference(A.begin(), A.end(), B.begin(), B.end(),
                       std::inserter(C, C.begin()));

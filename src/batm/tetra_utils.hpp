@@ -6,7 +6,7 @@
 
 struct PrismCage;
 namespace prism::geogram {
-    struct AABB_tet;
+struct AABB_tet;
 }
 
 namespace prism::local {
@@ -31,13 +31,13 @@ struct SizeController
 {
     std::shared_ptr<prism::geogram::AABB_tet> bg_tree;
     Eigen::VectorXd sizes;
-    SizeController(const RowMatd & tetV, const RowMati & tetT, const Eigen::VectorXd& tetSize);
-    double find_size_bound(const std::array<Vec3d,4>&) const;
+    SizeController(const RowMatd& tetV, const RowMati& tetT, const Eigen::VectorXd& tetSize);
+    double find_size_bound(const std::array<Vec3d, 4>&) const;
 };
 
 struct TetAttr
 {
-    Vec4i conn = {{-1,-1,-1,-1}};
+    Vec4i conn = {{-1, -1, -1, -1}};
     Vec4i prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
     bool is_removed = false;
 };
@@ -47,6 +47,9 @@ struct VertAttr
     Vec3d pos = Vec3d::Zero();
     int mid_id = -1; /**Points to the vertex id in the shell*/
 };
+
+using vert_info_t = std::vector<prism::tet::VertAttr>;
+using tet_info_t = std::vector<prism::tet::TetAttr>;
 
 /**
  *
@@ -58,15 +61,17 @@ struct VertAttr
  * std::vector<prism::tet::TetAttr>,
  * std::vector<std::vector<int>>>
  */
-std::tuple<
-    std::vector<prism::tet::VertAttr>,
-    std::vector<prism::tet::TetAttr>,
-    std::vector<std::vector<int>>>
-prepare_tet_info(
+std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> prepare_tet_info(
     const PrismCage& pc,
     const RowMatd& tet_v,
     const RowMati& tet_t,
     const Eigen::VectorXi& tet_v_pid);
+
+
+std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> reload(
+    std::string filename,
+    const PrismCage& pc);
+
 
 bool split_edge(
     PrismCage& pc,
@@ -122,7 +127,7 @@ void compact_tetmesh(
     std::vector<prism::tet::VertAttr>& vert_info,
     std::vector<prism::tet::TetAttr>& tet_info,
     std::vector<std::vector<int>>& vert_tet_conn,
-    PrismCage *pc = nullptr);
+    PrismCage* pc = nullptr);
 
 bool tetmesh_sanity(
     const std::vector<TetAttr>& tet_attrs,
