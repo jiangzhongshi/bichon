@@ -236,6 +236,30 @@ std::vector<int> edge_adjacent_boundary_face(
     return bnd_pris;
 };
 
+auto euler_char_tet = [](auto& tet_conns) {
+    std::set<int> verts;
+    std::set<std::pair<int, int>> edges;
+    std::set<std::array<int, 3>> faces;
+    auto local_edges =
+        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+    auto local_faces =
+        std::array<std::array<int, 3>, 4>{{{2,3,4}, {0, 2,3}, {0,1,3}, {0,1,2}}};
+    for (auto& tet : tet_conns) {
+        for (auto j=0; j<4; j++) {
+            auto f = std::array<int,3>();
+            for (auto k=0; k<3;k++) f[k] = tet[local_faces[j][k]];
+            std::sort(f.begin(), f.end());
+            verts.insert(tet[j]);
+            faces.insert(f);
+        }
+        for (auto [i0,i1]: local_edges) {
+            auto v0 = tet[i0], v1 = tet[i1]      ;
+            if (v0 > v1) std::swap(v0,v1);
+            edges.emplace(v0,v1);
+        }
+    }
+    return int(verts.size()) - int(edges.size()) + int(faces.size()) - int(tet_conns.size());
+};
 
 void update_tetra_conn(
     const std::vector<VertAttr>& vert_attrs,
@@ -855,8 +879,14 @@ bool collapse_edge(
         cnt_newtid++;
     }
     assert(cnt_newtid < old_tids.size());
-    prism::tet::logger().trace("Old tets : {}", old_tets);
-    prism::tet::logger().trace("New tets : {}", new_tets);
+    auto old_euler_char = euler_char_tet(old_tets);
+    auto new_euler_char = euler_char_tet(new_tets);
+    prism::tet::logger().trace("Old tets : {}, EC {}", old_tets, old_euler_char);
+    prism::tet::logger().trace("New tets : {}, EC {}", new_tets, new_euler_char);
+    if (old_euler_char != new_euler_char) {
+        prism::tet::logger().debug("Euler Characteristic Violation");
+        return false;
+    }
     auto rollback = []() { return false; };
     { // link condition TODO: HACK: not kosher
         auto old_verts = std::set<int>();
@@ -925,12 +955,14 @@ bool collapse_edge(
             for (auto f : neighbor0) {
                 auto new_tris = F[f];
                 prism::tet::logger()
-                    .trace("newtris [{},{},{}],", new_tris[0], new_tris[1], new_tris[2]);
+                    .trace("oldtris [{},{},{}],", new_tris[0], new_tris[1], new_tris[2]);
                 assert(new_tris[0] != -1);
                 old_fid.push_back(f);
                 if (id_in_array(new_tris, u1) != -1) continue; // collapsed faces
                 replace(new_tris, u0, u1);
                 moved_tris.emplace_back(new_tris);
+                prism::tet::logger()
+                    .trace("newtris [{},{},{}],", new_tris[0], new_tris[1], new_tris[2]);
                 new_fid.push_back(f);
             }
             assert(old_fid.size() == new_fid.size() + 2);

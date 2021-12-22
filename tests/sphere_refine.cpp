@@ -277,7 +277,7 @@ int edge_split_pass_for_dof(
     const auto bad_quality = 10.;
 
     auto cnt = 0;
-    std::vector<bool> quality_due(pc.mid.size(), false);
+    std::vector<bool> quality_due(tet_attrs.size(), false);
     auto local_edges =
         std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
 
@@ -419,7 +419,7 @@ TEST_CASE("loose-size")
             prism::tet::faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
             option.collapse_quality_threshold = -1;
             prism::tet::collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
-            option.collapse_quality_threshold = 150;
+            option.collapse_quality_threshold = 150; // aggressive
         };
     for (auto i = 0; i < 6; i++) {
         improves_quality();
@@ -455,7 +455,7 @@ TEST_CASE("continue-coarsen")
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
     edge_split_pass_for_dof(pc, option, vert_info, tet_info, vert_tet_conn);
-    prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
+    // prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
     prism::tet::logger().set_level(spdlog::level::trace);
 
     prism::tet::collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
