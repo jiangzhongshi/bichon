@@ -76,8 +76,8 @@ std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> reload(
 bool split_edge(
     PrismCage& pc,
     prism::local::RemeshOptions& option,
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v0,
     int v1);
@@ -85,8 +85,8 @@ bool split_edge(
 bool smooth_vertex(
     PrismCage& pc,
     const prism::local::RemeshOptions& option,
-    std::vector<VertAttr>& vert_attrs,
-    const std::vector<TetAttr>& tet_attrs,
+    prism::tet::vert_info_t& vert_attrs,
+    const prism::tet::tet_info_t& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
     SmoothType smooth_type,
     int v0,
@@ -95,8 +95,8 @@ bool smooth_vertex(
 bool swap_face(
     const PrismCage& pc,
     const prism::local::RemeshOptions& option,
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v0_id,
     int v1_id,
@@ -106,8 +106,8 @@ bool swap_face(
 bool swap_edge(
     const PrismCage& pc,
     const prism::local::RemeshOptions& option,
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
     int v2_id,
@@ -116,8 +116,8 @@ bool swap_edge(
 bool collapse_edge(
     PrismCage& pc,
     const prism::local::RemeshOptions& option,
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
     int v2_id,
@@ -130,8 +130,8 @@ void compact_tetmesh(
     PrismCage* pc = nullptr);
 
 bool tetmesh_sanity(
-    const std::vector<TetAttr>& tet_attrs,
-    const std::vector<VertAttr>& vert_attrs,
+    const prism::tet::tet_info_t& tet_attrs,
+    const prism::tet::vert_info_t& vert_attrs,
     const std::vector<std::vector<int>>& vert_tet_conn,
     const PrismCage& pc);
 } // namespace prism::tet
@@ -140,7 +140,7 @@ namespace prism::tet {
 [[deprecated]] double
 circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 double diameter2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
-bool tetra_validity(const std::vector<VertAttr>& vert_attrs, const Vec4i& t);
+bool tetra_validity(const prism::tet::vert_info_t& vert_attrs, const Vec4i& t);
 double tetra_quality(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 Vec3d newton_position_from_stack(std::vector<std::array<double, 12>>& assembles);
 } // namespace prism::tet

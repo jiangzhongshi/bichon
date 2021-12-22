@@ -267,9 +267,55 @@ TEST_CASE("sphere-coarsen-aggresive")
     }
 }
 
-auto edge_split_pass_for_quality = []() {
+int edge_split_pass_for_dof(
+    PrismCage& pc,
+    prism::local::RemeshOptions& option,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn)
+{
+    const auto bad_quality = 10.;
 
-};
+    auto cnt = 0;
+    std::vector<bool> quality_due(pc.mid.size(), false);
+    auto local_edges =
+        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+
+    std::set<std::pair<int, int>> all_edges;
+    for (auto i = 0; i < tet_attrs.size(); i++) {
+        auto& tet = tet_attrs[i].conn;
+        auto qual = prism::tet::tetra_quality(
+            vert_attrs[tet[0]].pos,
+            vert_attrs[tet[1]].pos,
+            vert_attrs[tet[2]].pos,
+            vert_attrs[tet[3]].pos);
+        if (qual > bad_quality) {
+            for (auto [i0, i1] : local_edges) {
+                auto v0 = tet[i0], v1 = tet[i1];
+                all_edges.emplace(std::min(v0, v1), std::max(v0, v1));
+            }
+            quality_due[i] = true;
+        }
+    }
+
+    // push queue
+    auto queue = std::priority_queue<std::tuple<double, int, int>>();
+    for (auto [v0, v1] : all_edges) {
+        auto len = (vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm();
+        queue.emplace(len, v0, v1);
+    }
+
+    while (!queue.empty()) {
+        auto [len, v0, v1] = queue.top();
+        queue.pop();
+        if ((vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm() != len) continue;
+
+        auto flag = prism::tet::split_edge(pc, option, vert_attrs, tet_attrs, vert_conn, v0, v1);
+        if (flag) cnt++;
+    }
+
+    return cnt;
+}
 
 TEST_CASE("graded-sphere")
 {
@@ -367,6 +413,7 @@ TEST_CASE("loose-size")
     }
     auto improves_quality =
         [&, &vert_info = vert_info, &tet_info = tet_info, &vert_tet_conn = vert_tet_conn]() {
+            edge_split_pass_for_dof(pc, option, vert_info, tet_info, vert_tet_conn);
             prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
             prism::tet::edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
             prism::tet::faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
@@ -375,7 +422,6 @@ TEST_CASE("loose-size")
             option.collapse_quality_threshold = 150;
         };
     for (auto i = 0; i < 6; i++) {
-        // edge_split_pass_with_sizer(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
         improves_quality();
         prism::tet::collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
         improves_quality();
@@ -384,6 +430,7 @@ TEST_CASE("loose-size")
     }
     prism::tet::serializer("../buildr/loose-coarse.h5", pc, vert_info, tet_info);
 }
+
 TEST_CASE("continue-coarsen")
 {
     std::string filename = "../buildr/loose-coarse.h5";
@@ -407,9 +454,10 @@ TEST_CASE("continue-coarsen")
         }
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
-    prism::tet::edge_split_pass_with_sizer(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
+    edge_split_pass_for_dof(pc, option, vert_info, tet_info, vert_tet_conn);
     prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
     prism::tet::logger().set_level(spdlog::level::trace);
 
     prism::tet::collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
+    prism::tet::serializer("../buildr/temp.h5", pc, vert_info, tet_info);
 }
