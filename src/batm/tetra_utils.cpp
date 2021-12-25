@@ -66,6 +66,19 @@ auto sorted_face = [](auto& conn, auto j) {
     return face;
 };
 
+auto disabled_attempt_shell_operation = [](const PrismCage& pc,
+                                           const std::vector<std::set<int>>& map_track,
+                                           const prism::local::RemeshOptions& option,
+                                           // specified infos below
+                                           double old_quality,
+                                           const std::vector<int>& old_fid,
+                                           const std::vector<Vec3i>& moved_pris,
+                                           std::vector<std::set<int>>& sub_trackee,
+                                           std::vector<RowMatd>& local_cp) {
+    sub_trackee.resize(moved_pris.size());
+    return 0;
+};
+
 auto attempt_shell_operation = prism::local_validity::attempt_zig_remesh;
 
 namespace prism::tet {
@@ -952,18 +965,6 @@ bool collapse_edge(
         return nb;
     };
 
-    auto attempt_shell_operation = [](const PrismCage& pc,
-                                      const std::vector<std::set<int>>& map_track,
-                                      const prism::local::RemeshOptions& option,
-                                      // specified infos below
-                                      double old_quality,
-                                      const std::vector<int>& old_fid,
-                                      const std::vector<Vec3i>& moved_pris,
-                                      std::vector<std::set<int>>& sub_trackee,
-                                      std::vector<RowMatd>& local_cp) {
-        sub_trackee.resize(moved_pris.size());
-        return 0;
-    };
 
     if (pc != nullptr && !bnd_faces.empty()) {
         for (auto f : bnd_faces) {

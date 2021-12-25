@@ -170,18 +170,19 @@ std::optional<std::pair<Vec3d, Vec3d>> prism::rotate(
     const std::vector<int>& nb,
     const std::vector<int>& nbi, int vid, double _) {
   Vec3d qp_normal(0, 0, 0);
-  // {
-  //   RowMatd FN(nb.size(), 3);
-  //   auto cnt = 0;
-  //   std::vector<int> range;
-  //   for (auto f : nb) {
-  //     FN.row(cnt) =
-  //         (mid[F[f][1]] - mid[F[f][0]]).cross(mid[F[f][2]] - mid[F[f][0]]);
-  //     range.push_back(cnt);
-  //     cnt++;
-  //   }
-  //   qp_normal = prism::cgal::qp_normal(FN, range);
-  // }
+  
+  {
+    RowMatd FN(nb.size(), 3);
+    auto cnt = 0;
+    std::vector<int> range;
+    for (auto f : nb) {
+      FN.row(cnt) =
+          (mid[F[f][1]] - mid[F[f][0]]).cross(mid[F[f][2]] - mid[F[f][0]]);
+      range.push_back(cnt);
+      cnt++;
+    }
+    qp_normal = prism::cgal::qp_normal(FN, range);
+  }
   if (qp_normal.norm() < 0.5) {
     qp_normal = Vec3d(0, 0, 0);
   }

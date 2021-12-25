@@ -30,7 +30,8 @@ int smooth_prism(PrismCage &pc, int vid,
   if (vid < pc.ref.aabb->num_freeze)
     return 1;  // only skip singularity, not boundary or feature
   std::optional<std::pair<Vec3d, Vec3d>> great_prism;
-  spdlog::trace("zoom or rotate for vid {}", vid);
+  auto op = true_zoom_false_rotate ? "Zoom": "Rotate";
+  spdlog::trace("{} for vid {}", op, vid);
   if (true_zoom_false_rotate) {
     great_prism = zoom(pc.base, pc.mid, pc.top, pc.F, VF[vid], VFi[vid], vid,
                        option.target_thickness);
@@ -39,7 +40,7 @@ int smooth_prism(PrismCage &pc, int vid,
                          option.target_thickness);
                          
   if (!great_prism) {
-    spdlog::debug("Zoom and Rotate failed.");
+    spdlog::debug("{} failed.", op);
     return 1;
   }
 
@@ -55,7 +56,7 @@ int smooth_prism(PrismCage &pc, int vid,
   auto &new_fid = VF[vid];
   auto &old_fid = VF[vid];
 
-  auto flag = 1;
+  auto flag = local_validity::PolyOpError::kMax;
   double alpha = 1.;
   std::tuple<Vec3d, Vec3d, Vec3d> old_locations{pc.base[vid], pc.mid[vid],
                                                 pc.top[vid]};
@@ -65,26 +66,26 @@ int smooth_prism(PrismCage &pc, int vid,
   bool enable_feature_separation =
       skip[vid];  // TODO, maybe seperate the two cases of feature vs. real
                   // skip.
-  while (flag == 1 || flag == 2) {  // shrink if there is a volume failure.
-    pc.base[vid] = relocations[0] * (alpha) + (1 - alpha) * pc.mid[vid];
-    pc.top[vid] = relocations[2] * (alpha) + (1 - alpha) * pc.mid[vid];
+  while (flag != local_validity::PolyOpError::kSuccess) {  // shrink if there is a volume failure.
+    pc.base[vid] = relocations[0] * (alpha) + (1 - alpha) * std::get<0>(old_locations);
+    pc.top[vid] = relocations[2] * (alpha) + (1 - alpha) * std::get<2>(old_locations);
     flag = attempt_operation(
         pc, pc.track_ref, option, old_quality, old_fid, moved_tris, new_tracks,
         local_cp);
     spdlog::trace("newb {}", pc.base[vid]);
     spdlog::trace("newt {}", pc.top[vid]);
-    alpha *= 0.8;
+    alpha *= 0.5;
     if (alpha < 1e-2) break;
   }
-  if (flag > 0) {
-    spdlog::trace("ZoomRotate checker failed. {}", flag);
+  if (flag != local_validity::PolyOpError::kSuccess) {
+    spdlog::trace("{} checker failed. {}", op, flag);
     std::tie(pc.base[vid], pc.mid[vid], pc.top[vid]) = old_locations;
     return flag;
   }
   prism::local_validity::post_operation(pc, option, old_fid, new_fid,
                                         new_tracks, local_cp);
-  spdlog::trace("ZoomRotate SUCCEED, move to next.");
-  return 0;
+  spdlog::trace("{} SUCCEED, move to next.", op);
+  return local_validity::PolyOpError::kSuccess;
 }
 
 int smooth_single(PrismCage &pc, int vid,
@@ -161,7 +162,7 @@ int smooth_single(PrismCage &pc, int vid,
       pc, pc.track_ref, option, old_quality, old_fid, moved_tris, new_tracks,
       local_cp);
 
-  if (flag > 0) {
+  if (flag != local_validity::PolyOpError::kSuccess) {
     spdlog::trace("Pan checker failed.");
     std::tie(pc.base[vid], pc.mid[vid], pc.top[vid]) = old_locations;
     return flag;
@@ -170,7 +171,7 @@ int smooth_single(PrismCage &pc, int vid,
   prism::local_validity::post_operation(pc, option, old_fid, new_fid,
                                         new_tracks, local_cp);
   spdlog::trace("SUCCEED, move to next.");
-  return 0;
+  return local_validity::PolyOpError::kSuccess;
 };
 }  // namespace prism::local
 
