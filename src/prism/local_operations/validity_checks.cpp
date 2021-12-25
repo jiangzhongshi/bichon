@@ -155,8 +155,8 @@ bool volume_check(const std::vector<Vec3d> &base, const std::vector<Vec3d> &mid,
   timer.start();
   auto checker = [](const std::array<Vec3d, 6> &a,
                     const std::array<bool, 3> &c) {
-    return prism::predicates::positive_prism_volume(a, c);
-    // return prism::predicates::positive_nonlinear_prism(a,c);
+    // return prism::predicates::positive_prism_volume(a, c);
+    return prism::predicates::positive_nonlinear_prism(a,c);
   };
   for (auto [v0, v1, v2] : tris) {
     // auto checker = [tc = (v1 > v2 ? TETRA_SPLIT_A : TETRA_SPLIT_B)](
