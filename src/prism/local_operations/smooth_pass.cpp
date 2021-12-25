@@ -77,7 +77,7 @@ int smooth_prism(PrismCage &pc, int vid,
     if (alpha < 1e-2) break;
   }
   if (flag > 0) {
-    spdlog::trace("ZoomRotate checker failed.");
+    spdlog::trace("ZoomRotate checker failed. {}", flag);
     std::tie(pc.base[vid], pc.mid[vid], pc.top[vid]) = old_locations;
     return flag;
   }

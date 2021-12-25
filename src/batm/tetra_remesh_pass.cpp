@@ -94,7 +94,7 @@ std::priority_queue<std::tuple<double, int, int, int>> construct_face_queue(
 };
 
 int faceswap_pass(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_info,
     prism::tet::tet_info_t& tet_info,
@@ -124,7 +124,7 @@ int faceswap_pass(
 };
 
 int edgeswap_pass(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_info,
     prism::tet::tet_info_t& tet_info,
@@ -146,7 +146,7 @@ int edgeswap_pass(
 }
 
 int collapse_pass(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_info,
     prism::tet::tet_info_t& tet_info,
@@ -171,7 +171,8 @@ int collapse_pass(
                 auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
                 sizing = std::min(t_size, sizing);
             }
-            if (len >= 0.8 * sizing) continue;
+            if (std::abs(len) >= 0.8 *0.8 * sizing) continue;
+            // spdlog::info("sizing {}, {}", len, sizing);
         }
         // erase v0
         auto suc =
@@ -199,14 +200,14 @@ int collapse_pass(
 }
 
 int vertexsmooth_pass(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_info,
     prism::tet::tet_info_t& tet_info,
     std::vector<std::vector<int>>& vert_tet_conn,
     double thick)
 {
-    std::vector<bool> snap_flag(pc.mid.size(), false);
+    std::vector<bool> snap_flag(pc->mid.size(), false);
     auto total_cnt = 0;
     for (auto v0 = 0; v0 < vert_info.size(); v0++) {
         auto& nb = vert_tet_conn[v0];
@@ -248,7 +249,7 @@ int vertexsmooth_pass(
 
 void serializer(
     std::string filename,
-    const PrismCage& pc,
+    const PrismCage* pc,
     const prism::tet::vert_info_t& vert_info,
     const prism::tet::tet_info_t& tet_info)
 {
@@ -271,40 +272,45 @@ void serializer(
         return std::tuple(V, T, V_pid);
     };
 
-    pc.serialize(
-        filename,
-        std::function<void(HighFive::File&)>(
-            [&vert_info = vert_info, &tet_info = tet_info, &convert_to_VT](HighFive::File& file) {
-                RowMatd V;
-                Eigen::VectorXi V_pid;
-                RowMati T;
-                std::tie(V, T, V_pid) = convert_to_VT(vert_info, tet_info);
-                Eigen::VectorXd S(T.rows());
-                auto Q = S;
-                for (auto i = 0; i < T.rows(); i++) {
-                    S[i] = prism::tet::diameter2(
-                        V.row(T(i, 0)),
-                        V.row(T(i, 1)),
-                        V.row(T(i, 2)),
-                        V.row(T(i, 3)));
-                    Q[i] = prism::tet::tetra_quality(
-                        V.row(T(i, 0)),
-                        V.row(T(i, 1)),
-                        V.row(T(i, 2)),
-                        V.row(T(i, 3)));
-                }
-                prism::tet::logger().info("Saving V {} T {}", V.rows(), T.rows());
-                H5Easy::dump(file, "tet_v", V);
-                H5Easy::dump(file, "tet_t", T);
-                H5Easy::dump(file, "tet_v_pid", V_pid);
-                H5Easy::dump(file, "tet_size", S);
-                H5Easy::dump(file, "tet_qual", Q);
-            }));
+    auto saver = std::function<void(HighFive::File&)>(
+        [&vert_info = vert_info, &tet_info = tet_info, &convert_to_VT](HighFive::File& file) {
+            RowMatd V;
+            Eigen::VectorXi V_pid;
+            RowMati T;
+            std::tie(V, T, V_pid) = convert_to_VT(vert_info, tet_info);
+            Eigen::VectorXd S(T.rows());
+            auto Q = S;
+            for (auto i = 0; i < T.rows(); i++) {
+                S[i] = prism::tet::diameter2(
+                    V.row(T(i, 0)),
+                    V.row(T(i, 1)),
+                    V.row(T(i, 2)),
+                    V.row(T(i, 3)));
+                Q[i] = prism::tet::tetra_quality(
+                    V.row(T(i, 0)),
+                    V.row(T(i, 1)),
+                    V.row(T(i, 2)),
+                    V.row(T(i, 3)));
+            }
+            prism::tet::logger().info("Saving V {} T {}", V.rows(), T.rows());
+            H5Easy::dump(file, "tet_v", V);
+            H5Easy::dump(file, "tet_t", T);
+            H5Easy::dump(file, "tet_v_pid", V_pid);
+            H5Easy::dump(file, "tet_size", S);
+            H5Easy::dump(file, "tet_qual", Q);
+        });
+    if (pc != nullptr) {
+        pc->serialize(filename, saver);
+    }
+    else {
+        auto file = H5Easy::File(filename, H5Easy::File::Overwrite);
+        saver(file);
+    }
 }
 
 
 void edge_split_pass_with_sizer(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_info,
     prism::tet::tet_info_t& tet_info,
@@ -359,7 +365,7 @@ void edge_split_pass_with_sizer(
         //     v0,
         //     v1,
         //     tet_info.size(),
-        //     pc.F.size(),
+        //     pc->F.size(),
         //     minimum_edge());
         auto suc = prism::tet::split_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1);
         if (!suc) continue;

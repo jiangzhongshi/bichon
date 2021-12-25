@@ -18,7 +18,7 @@ struct RemeshOptions {
   double distortion_bound = 0.1;
   double target_thickness = 0.01;
   double zig_thick = 1e-4;
-  bool parallel = true;
+  bool parallel = false;
   bool use_polyshell = false; // zig remesh or snapper remesh
   double relax_quality_threshold = 20;
   double collapse_quality_threshold = 30;
@@ -26,7 +26,7 @@ struct RemeshOptions {
   bool split_improve_quality = true;
   bool volume_centric = false;  // volume quality etc.
   bool dynamic_hashgrid =
-      false;  // use a dynamic spatial hashgrid instead of static AABB
+      true;  // use a dynamic spatial hashgrid instead of static AABB
 
   std::function<double(const Vec3d &)> sizing_field;
   std::vector<double> target_adjustment;

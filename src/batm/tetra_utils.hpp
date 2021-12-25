@@ -62,7 +62,7 @@ using tet_info_t = std::vector<prism::tet::TetAttr>;
  * std::vector<std::vector<int>>>
  */
 std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> prepare_tet_info(
-    const PrismCage& pc,
+    const PrismCage* pc,
     const RowMatd& tet_v,
     const RowMati& tet_t,
     const Eigen::VectorXi& tet_v_pid);
@@ -70,11 +70,11 @@ std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> prepare_tet_i
 
 std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> reload(
     std::string filename,
-    const PrismCage& pc);
+    const PrismCage* pc);
 
 
 bool split_edge(
-    PrismCage& pc,
+    PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_attrs,
     prism::tet::tet_info_t& tet_attrs,
@@ -83,7 +83,7 @@ bool split_edge(
     int v1);
 
 bool smooth_vertex(
-    PrismCage& pc,
+    PrismCage* pc,
     const prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_attrs,
     const prism::tet::tet_info_t& tet_attrs,
@@ -93,7 +93,7 @@ bool smooth_vertex(
     double size_control);
 
 bool swap_face(
-    const PrismCage& pc,
+    const PrismCage* pc,
     const prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_attrs,
     prism::tet::tet_info_t& tet_attrs,
@@ -104,7 +104,7 @@ bool swap_face(
     double size_control);
 
 bool swap_edge(
-    const PrismCage& pc,
+    const PrismCage* pc,
     const prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_attrs,
     prism::tet::tet_info_t& tet_attrs,
@@ -114,7 +114,7 @@ bool swap_edge(
     double size_control);
 
 bool collapse_edge(
-    PrismCage& pc,
+    PrismCage* pc,
     const prism::local::RemeshOptions& option,
     prism::tet::vert_info_t& vert_attrs,
     prism::tet::tet_info_t& tet_attrs,
@@ -133,7 +133,7 @@ bool tetmesh_sanity(
     const prism::tet::tet_info_t& tet_attrs,
     const prism::tet::vert_info_t& vert_attrs,
     const std::vector<std::vector<int>>& vert_tet_conn,
-    const PrismCage& pc);
+    const PrismCage* pc);
 } // namespace prism::tet
 
 namespace prism::tet {
