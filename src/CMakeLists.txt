@@ -52,6 +52,7 @@ add_library(prism::prism ALIAS prism_library)
 
 
 add_library(cumin_library
+  cumin/tetshell_utils.cpp
   cumin/curve_utils.cpp
   cumin/curve_pass.cpp
   cumin/inversion_check.cpp
@@ -60,7 +61,7 @@ add_library(cumin_library
   cumin/stitch_surface_to_volume.cpp
   cumin/curve_validity.cpp)
 target_compile_features(cumin_library PUBLIC cxx_std_17)
-target_link_libraries(cumin_library PUBLIC prism_library)
+target_link_libraries(cumin_library PUBLIC prism_library libTetShell)
 target_include_directories(cumin_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/)
 target_compile_definitions(cumin_library PUBLIC CUMIN_MAGIC_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../python/curve/data/")
 

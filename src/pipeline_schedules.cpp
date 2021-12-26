@@ -2,21 +2,30 @@
 #include <fmt/ranges.h>
 #include <igl/Timer.h>
 #include <igl/avg_edge_length.h>
+#include <igl/barycentric_coordinates.h>
+#include <igl/boundary_loop.h>
+#include <igl/doublearea.h>
+#include <igl/is_edge_manifold.h>
+#include <igl/is_vertex_manifold.h>
+#include <igl/per_face_normals.h>
 #include <igl/read_triangle_mesh.h>
 #include <igl/remove_duplicate_vertices.h>
 #include <igl/write_triangle_mesh.h>
 #include <spdlog/spdlog.h>
-
+#include <filesystem>
 #include <highfive/H5Easy.hpp>
 #include <nlohmann/json.hpp>
+#include <utility>
+
+#include <cumin/high_order_optimization.hpp>
+#include <cumin/tetshell_utils.hpp>
 #include <prism/cage_utils.hpp>
 #include <prism/energy/prism_quality.hpp>
 #include <prism/feature_utils.hpp>
 #include <prism/local_operations/section_remesh.hpp>
-#include <utility>
-
 #include "cumin/curve_utils.hpp"
 #include "cumin/curve_validity.hpp"
+#include "cumin/stitch_surface_to_volume.hpp"
 #include "prism/PrismCage.hpp"
 #include "prism/cage_check.hpp"
 #include "prism/geogram/AABB.hpp"
@@ -57,11 +66,7 @@ auto checker_in_main = [](const auto &pc, const auto &option, bool enable) {
   spdlog::info("Verifier: Done Checking");
 };
 
-#include <igl/boundary_loop.h>
-#include <igl/doublearea.h>
-#include <igl/is_edge_manifold.h>
-#include <igl/is_vertex_manifold.h>
-#include <igl/per_face_normals.h>
+
 double min_dihedral_angles(const RowMatd &V, const RowMati &F) {
   RowMatd FN;
   RowMati TT, TTi;
@@ -172,121 +177,6 @@ bool preconditions(const RowMatd &V, const RowMati &F,
   return true;
 }
 
-/// filling
-
-RowMatd one_side_extrusion(RowMatd &V, const RowMati &F, RowMatd &VN,
-                           bool out) {
-  auto initial_step = 1e-6;
-  spdlog::enable_backtrace(30);
-  std::set<int> omni_singu;
-  for (int i = 0; i < VN.rows(); i++) {
-    if (VN.row(i).norm() < 0.5)
-      omni_singu.insert(i);
-    else
-      break;
-  }
-  int pure_singularity = omni_singu.size();
-  omni_singu.clear();
-  prism::cage_utils::most_visible_normals(V, F, VN, omni_singu, -1.);
-  for (auto i = 0; i < pure_singularity; i++) {
-    VN.row(i).setZero();
-    omni_singu.insert(i);
-  }
-  if (omni_singu.size() != pure_singularity) {
-    spdlog::error("QP Computation introduces new singularity.");
-    exit(1);
-  }
-
-  if (omni_singu.empty()) {
-    spdlog::info("Succeessful Normals");
-  } else {
-    spdlog::info("Omni Singularity {} ", omni_singu.size());
-    spdlog::trace("<Freeze> Omni \n {}", omni_singu);
-  }
-  auto tree = prism::geogram::AABB(V, F, false);
-  std::vector<double> initial_steps(V.rows(), initial_step);
-  auto out_steps = prism::cage_utils::volume_extrude_steps(
-      V, F, out ? VN : (-VN), out, omni_singu.size(), initial_steps);
-
-  // pool back to vertices
-  std::vector<double> v_out(V.rows(), initial_step),
-      v_in(V.rows(), initial_step);
-  for (int i = 0; i < F.rows(); i++) {
-    for (int j = 0; j < 3; j++) {
-      auto vid = F(i, j);
-      v_out[vid] = std::min(v_out[vid], out_steps[i]);
-    }
-  }
-
-  RowMatd outer;
-  if (out)
-    outer =
-        V +
-        Eigen::Map<Eigen::VectorXd>(v_out.data(), v_out.size()).asDiagonal() *
-            VN;
-  else
-    outer =
-        V -
-        Eigen::Map<Eigen::VectorXd>(v_out.data(), v_out.size()).asDiagonal() *
-            VN;
-  std::vector<Vec3d> mid, top;
-  std::vector<Vec3i> vF;
-  std::vector<std::vector<int>> VF, VFi;
-  eigen2vec(V, mid);
-  eigen2vec(outer, top);
-  eigen2vec(F, vF);
-  igl::vertex_triangle_adjacency(V, F, VF, VFi);
-  if (out)
-    prism::cage_utils::recover_positive_volumes(mid, top, vF, VN, VF,
-                                                pure_singularity, out);
-  else
-    prism::cage_utils::recover_positive_volumes(top, mid, vF, VN, VF,
-                                                pure_singularity, out);
-
-  prism::cage_utils::hashgrid_shrink(mid, top, vF, VF);
-
-  if (out)
-    prism::cage_utils::recover_positive_volumes(mid, top, vF, VN, VF,
-                                                pure_singularity, out);
-  else
-    prism::cage_utils::recover_positive_volumes(top, mid, vF, VN, VF,
-                                                pure_singularity, out);
-  RowMatd mtop;
-  vec2eigen(top, mtop);
-  return mtop;
-}
-#include <shell/Utils.h>
-#include <tetwild/Logger.h>
-#include <tetwild/tetwild.h>
-// label == 1 inside 2 outside
-void tetshell_fill(const RowMatd &ext_base, const RowMatd &shell_base,
-                   const RowMatd &shell_top, const RowMatd &ext_top,
-                   const RowMati &F_sh, Eigen::MatrixXd &V_out,
-                   Eigen::MatrixXi &T_out, Eigen::VectorXi &label_output) {
-  int oneShellVertices = ext_base.rows();
-  Eigen::MatrixXd V_in(4 * ext_base.rows(), 3);
-  V_in << ext_base, shell_base, shell_top, ext_top;
-  Eigen::MatrixXi F_in(4 * F_sh.rows(), 3);
-  for (auto i = 0; i < 4; i++) {
-    F_in.middleRows(i * F_sh.rows(), F_sh.rows()) =
-        F_sh.array() + oneShellVertices * i;
-  }
-  Eigen::VectorXd quality_output;
-  tetwild::Args args;
-  args.initial_edge_len_rel = 0.25;
-  args.tet_mesh_sanity_check = true;
-  args.write_csv_file = false;
-  args.is_quiet = true;
-  args.postfix = "";
-  tetwild::logger().set_level(spdlog::level::info);
-  tetwild::tetrahedralization(V_in, F_in, V_out, T_out, quality_output,
-                              label_output, args);
-};
-
-#include <cumin/high_order_optimization.hpp>
-#include <filesystem>
-
-#include "cumin/stitch_surface_to_volume.hpp"
 
 bool checker_inversion(const PrismCage &pc,
                        const std::vector<RowMatd> &complete_cp) {
@@ -405,14 +295,14 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   }
 
   spdlog::info("== TOP ==");
-  vtop = one_side_extrusion(mT, mF, VN, true);
+  vtop = prism::tetshell::one_side_extrusion(mT, mF, VN, true);
   spdlog::info("== BOTTOM ==");
-  vbase = one_side_extrusion(mB, mF, VN, false);
+  vbase = prism::tetshell::one_side_extrusion(mB, mF, VN, false);
 
   Eigen::MatrixXd Vmsh;
   Eigen::MatrixXi Tmsh;
   Eigen::VectorXi labels;
-  tetshell_fill(vbase, mB, mT, vtop, mF, Vmsh, Tmsh, labels);
+  prism::tetshell::tetshell_fill(vbase, mB, mT, vtop, mF, Vmsh, Tmsh, labels);
   spdlog::debug("Tmsh {}", Tmsh.rows());
   std::vector<Eigen::VectorXi> T1;
   for (auto l = 0; l < labels.size(); l++) {
@@ -423,10 +313,6 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
 
   spdlog::debug("Tmsh {}", Tmsh.rows());
 
-  auto &helper = prism::curve::magic_matrices(-1, -1);
-  const auto elevlag_from_bern = helper.elev_lag_from_bern;
-  const auto vec_dxyz = helper.volume_data.vec_dxyz;
-
   RowMatd nodes;
   RowMati p4T;
 
@@ -436,7 +322,6 @@ void volume_stage(PrismCage &pc, std::vector<RowMatd> &complete_cp,
   cutet_optim(nodes, p4T, config["cutet"]);
 };
 
-#include <igl/barycentric_coordinates.h>
 ////////////////////////
 //// This is the main entry point for the curve mesh generation program.
 //// @Params:
