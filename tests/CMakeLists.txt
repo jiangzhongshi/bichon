@@ -44,7 +44,7 @@ target_sources(prism_tests PRIVATE
                 tetra_opt.cpp
                 sizing_background_mesh.cpp
                 sphere_refine.cpp)
-target_link_libraries(prism_tests PUBLIC doctest cumin_library prism::prism batm_library json)
+target_link_libraries(prism_tests PUBLIC doctest cumin_library prism::prism batm_library json libTetShell)
  #spdlog::spdlog igl::core highfive geogram mitsuba_autodiff igl::cgal)
 
 target_compile_features(prism_tests PUBLIC cxx_std_17)
