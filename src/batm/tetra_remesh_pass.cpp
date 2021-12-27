@@ -176,7 +176,7 @@ int edge_split_pass_for_dof(
     std::vector<std::vector<int>>& vert_conn)
 {
     // pick the middle of minimum (3) with max-collapsing allowed.
-    const auto bad_quality = (option.collapse_quality_threshold + 3)/2;
+    const auto bad_quality = (option.collapse_quality_threshold + 3) / 2;
 
     auto cnt = 0;
     std::vector<bool> quality_due(tet_attrs.size(), false);
@@ -222,6 +222,7 @@ int edge_split_pass_for_dof(
 
     return cnt;
 }
+
 int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
@@ -233,11 +234,13 @@ int collapse_pass(
     auto edge_queue = construct_collapse_queue(vert_info, tet_info);
     prism::tet::logger().info("Edge Collapse: queue size {}", edge_queue.size());
     auto cnt = 0;
+    auto previous = std::array<int, 2>{-1, -1};
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
         edge_queue.pop();
         // TODO: this does not prevent double testing-rejection. Slightly more cost.
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
+        if (previous[0] == v0 && previous[1] == v1) continue;
         {
             auto sizing2 = 1.0;
             auto& nb1 = vert_tet_conn[v0];
@@ -251,6 +254,7 @@ int collapse_pass(
             if (std::abs(len) >= 0.8 * 0.8 * sizing2) continue; // only collapse over-short edges.
             // spdlog::info("sizing {}, {}", len, sizing);
         }
+        previous = {v0, v1};
         // erase v0
         auto suc =
             prism::tet::collapse_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, 1.0);
@@ -271,11 +275,14 @@ int collapse_pass(
             auto len = (vert_info[vi].pos - vert_info[vj].pos).squaredNorm();
             edge_queue.emplace(-len, vi, vj);
         }
+
+        if (cnt % 1000 == 0) {
+            prism::tet::logger().info("Collapsed {}", cnt);
+        }
     }
     prism::tet::logger().info("Size {} {}", vert_info.size(), tet_info.size());
     return cnt;
 }
-
 
 
 int vertexsmooth_pass(

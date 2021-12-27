@@ -1,5 +1,6 @@
 #include <doctest.h>
 
+#include "batm/tetra_logger.hpp"
 #include "batm/tetra_remesh_pass.hpp"
 #include "batm/tetra_utils.hpp"
 #include "cumin/tetshell_utils.hpp"
@@ -91,16 +92,18 @@ auto barycentric_sizer_constructor = [](const auto& func) {
 TEST_CASE("feature-tet-coarsen")
 {
     std::string filename = "../buildr/bunny-tet.h5";
+    // std::string filename = "../buildr/bunny-tet-temp.h5";
     auto pc = std::make_shared<PrismCage>(filename);
     auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
 
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
 
     auto sizer = barycentric_sizer_constructor(
-        [](const auto& bc) { return (bc[0] < 0.3) ? std::pow(5e-2, 2) : 1.0; });
+        [](const auto& bc) { return (bc[0] < 0.3) ? std::pow(0.1, 2) : 1.0; });
     option.collapse_quality_threshold = 30;
     //  spdlog::set_level(spdlog::level::trace);
     REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc.get()));
+    prism::tet::logger().enable_backtrace(100);
     for (auto i = 0; i < 5; i++) {
         prism::tet::edge_split_pass_with_sizer(
             pc.get(),
@@ -114,9 +117,28 @@ TEST_CASE("feature-tet-coarsen")
         prism::tet::faceswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
         prism::tet::edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
         prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-        collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
+
+        // prism::tet::serializer("before_collapse_debug.h5", pc.get(), vert_info, tet_info);
+        prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc.get());
         prism::tet::serializer("../buildr/bunny-tet-temp.h5", pc.get(), vert_info, tet_info);
     }
     prism::tet::serializer("../buildr/bunny-tet-coarse.h5", pc.get(), vert_info, tet_info);
+}
+
+TEST_CASE("single-debug-feature-tet")
+{
+    std::string filename = "before_collapse_debug.h5";
+    auto pc = std::make_shared<PrismCage>(filename);
+    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
+
+    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
+
+    auto sizer = barycentric_sizer_constructor(
+        [](const auto& bc) { return (bc[0] < 0.3) ? std::pow(5e-2, 2) : 1.0; });
+    option.collapse_quality_threshold = 30;
+    //  spdlog::set_level(spdlog::level::trace);
+    REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc.get()));
+    prism::tet::logger().enable_backtrace(100);
+    prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
 }

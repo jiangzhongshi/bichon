@@ -151,6 +151,8 @@ TEST_CASE("graded-sphere")
         [](const auto& bc) { return (bc[0] < 0.1) ? std::pow(5e-2, 2) : 1.0; });
 
     auto sizer2 = barycentric_sizer_constructor([](const auto& bc) { return 1.0; });
+    prism::tet::edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
+    prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer2);
 
     for (auto i = 0; i < 5; i++) {
         prism::tet::edge_split_pass_with_sizer(
@@ -165,7 +167,7 @@ TEST_CASE("graded-sphere")
         prism::tet::faceswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
         prism::tet::edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
         prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-        collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
+        prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc.get());
     }
     prism::tet::serializer("../buildr/left.h5", pc.get(), vert_info, tet_info);
@@ -255,9 +257,4 @@ TEST_CASE("shell-only")
     for (auto repeat = 0; repeat < 5; repeat++) prism::local::localsmooth_pass(*pc, option);
     prism::local::wildcollapse_pass(*pc, option);
     pc->serialize("../buildr/after_collapse.h5");
-}
-
-TEST_CASE("improve-quality-test")
-{
-
 }

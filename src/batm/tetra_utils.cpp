@@ -502,8 +502,6 @@ bool split_edge(
         return true;
     }());
 
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
-
     return true;
 }
 
@@ -950,6 +948,8 @@ bool collapse_edge(
         prism::tet::logger().trace("Internal edge connecting boundary vertices.");
         return false;
     }
+    prism::tet::logger().trace("bnd faces {}", bnd_faces);
+
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
 
@@ -968,17 +968,19 @@ bool collapse_edge(
         cnt_newtid++;
     }
     assert(cnt_newtid < old_tids.size());
+    auto full_old_tid = old_tids;
+    auto full_new_tets = new_tets;
     { // use full 2-neighbor's EC for handling vertices on the surface.
         auto nb2_remain = std::vector<int>();
         set_minus(nb2, nb1, nb2_remain);
         auto full_old_tets = old_tets;
-        auto full_new_tets = new_tets;
         for (auto i : nb2_remain) {
             full_old_tets.push_back(tet_attrs[i].conn);
             full_new_tets.push_back(tet_attrs[i].conn);
+            full_old_tid.push_back(i);
         }
-        auto old_euler_char = euler_char_tet(old_tets);
-        auto new_euler_char = euler_char_tet(new_tets);
+        auto old_euler_char = euler_char_tet(full_old_tets);
+        auto new_euler_char = euler_char_tet(full_new_tets);
         prism::tet::logger().trace("Old tets : {}, EC {}", full_old_tets, old_euler_char);
         prism::tet::logger().trace("New tets : {}, EC {}", full_new_tets, new_euler_char);
         if (old_euler_char != new_euler_char) {
@@ -1067,13 +1069,14 @@ bool collapse_edge(
         vert_attrs[v1_id].mid_id = vert_attrs[v2_id].mid_id;
     }
 
-    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
+    std::sort(full_old_tid.begin(), full_old_tid.end());
+
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, full_old_tid, full_new_tets, new_fid, moved_tris);
 
     vert_conn[v1_id].clear();
     vert_attrs[v1_id].pos.fill(0);
     vert_attrs[v1_id].mid_id = -1;
 
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
     prism::tet::logger().debug("|||| Successful Collapse");
 
     return true;
@@ -1147,7 +1150,6 @@ bool swap_edge(
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
 
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
     return true;
 }
 
@@ -1202,7 +1204,6 @@ bool swap_face(
     if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control)) return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
     return true;
 }
 
