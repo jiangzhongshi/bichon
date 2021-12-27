@@ -333,15 +333,7 @@ int edge_split_pass_for_dof(
     return cnt;
 }
 
-TEST_CASE("graded-sphere")
-{
-    std::string filename = "../buildr/coarse.h5";
-    auto pc = new PrismCage(filename);
-    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc);
-    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 8;
-    prism::tet::logger().enable_backtrace(100);
-
+auto barycentric_sizer_constructor = [](const auto& func) {
     auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
     {
         H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
@@ -353,10 +345,27 @@ TEST_CASE("graded-sphere")
         RowMatd BC;
         igl::barycenter(bgV, bgT, BC);
         for (auto i = 0; i < bgT.rows(); i++) {
-            if (BC(i, 0) < 0.1) sizes[i] = 5e-3;
+            sizes[i] = func(BC.row(i));
+            // if (BC(i, 0) < 0.1) sizes[i] = std::pow(5e-2, 2);
         }
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
+    return std::move(sizer);
+};
+
+TEST_CASE("graded-sphere")
+{
+    std::string filename = "../buildr/coarse.h5";
+    auto pc = new PrismCage(filename);
+    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc);
+    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
+    option.collapse_quality_threshold = 10;
+    prism::tet::logger().enable_backtrace(100);
+
+    auto sizer = barycentric_sizer_constructor(
+        [](const auto& bc) { return (bc[0] < 0.1) ? std::pow(5e-2, 2) : 1.0; });
+
+    auto sizer2 = barycentric_sizer_constructor([](const auto& bc) { return 1.0; });
 
     for (auto i = 0; i < 5; i++) {
         prism::tet::edge_split_pass_with_sizer(
@@ -366,12 +375,16 @@ TEST_CASE("graded-sphere")
             tet_info,
             vert_tet_conn,
             sizer);
-        prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1e-2);
+        prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
         prism::tet::edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
-        // if (i < 3) collapse_pass(&pc, option, vert_info, tet_info, vert_tet_conn, 1.);
+        prism::tet::faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
+        edge_split_pass_for_dof(pc, option, vert_info, tet_info, vert_tet_conn);
+        prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 0.1);
+        collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer2);
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc);
     }
     prism::tet::serializer("../buildr/left.h5", pc, vert_info, tet_info);
+    return;
     {
         H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
         auto bgV = H5Easy::load<RowMatd>(file, "V");
@@ -386,8 +399,8 @@ TEST_CASE("graded-sphere")
         }
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
-    option.collapse_quality_threshold = 10;
-    for (auto i = 0; i < 3; i++) {
+    option.collapse_quality_threshold = 8;
+    for (auto i = 0; i < 5; i++) {
         prism::tet::edge_split_pass_with_sizer(
             pc,
             option,
@@ -395,9 +408,10 @@ TEST_CASE("graded-sphere")
             tet_info,
             vert_tet_conn,
             sizer);
-        prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1e-2);
+        prism::tet::vertexsmooth_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1e-1);
         prism::tet::edgeswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
-        // if (i < 3) collapse_pass(&pc, option, vert_info, tet_info, vert_tet_conn, 1.);
+        prism::tet::faceswap_pass(pc, option, vert_info, tet_info, vert_tet_conn, 1.);
+        if (i < 3) collapse_pass(pc, option, vert_info, tet_info, vert_tet_conn, sizer);
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc);
     }
     prism::tet::serializer("../buildr/right.h5", pc, vert_info, tet_info);
@@ -533,7 +547,7 @@ TEST_CASE("shell-only")
 
 TEST_CASE("single-smoother-debug")
 {
-     std::string filename = "../buildr/after_collapse.h5";
+    std::string filename = "../buildr/after_collapse.h5";
     auto pc = std::shared_ptr<PrismCage>(new PrismCage(filename));
     prism::local::RemeshOptions option(pc->mid.size(), /*target_edge_length=*/0.5);
     option.collapse_quality_threshold = 150;
