@@ -168,6 +168,60 @@ int edgeswap_pass(
     return cnt;
 }
 
+int edge_split_pass_for_dof(
+    PrismCage* pc,
+    prism::local::RemeshOptions& option,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn)
+{
+    // pick the middle of minimum (3) with max-collapsing allowed.
+    const auto bad_quality = (option.collapse_quality_threshold + 3)/2;
+
+    auto cnt = 0;
+    std::vector<bool> quality_due(tet_attrs.size(), false);
+    auto local_edges =
+        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+
+    std::set<std::pair<int, int>> all_edges;
+    for (auto i = 0; i < tet_attrs.size(); i++) {
+        if (tet_attrs[i].is_removed) continue;
+        auto& tet = tet_attrs[i].conn;
+        auto qual = prism::tet::tetra_quality(
+            vert_attrs[tet[0]].pos,
+            vert_attrs[tet[1]].pos,
+            vert_attrs[tet[2]].pos,
+            vert_attrs[tet[3]].pos);
+        if (qual > bad_quality) {
+            for (auto [i0, i1] : local_edges) {
+                auto v0 = tet[i0], v1 = tet[i1];
+                all_edges.emplace(std::min(v0, v1), std::max(v0, v1));
+            }
+            quality_due[i] = true;
+        }
+    }
+
+    // push queue
+    auto queue = std::priority_queue<std::tuple<double, int, int>>();
+    for (auto [v0, v1] : all_edges) {
+        auto len = (vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm();
+        queue.emplace(len, v0, v1);
+    }
+
+    while (!queue.empty()) {
+        auto [len, v0, v1] = queue.top();
+        queue.pop();
+        if ((vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm() != len) continue;
+
+        assert(!set_inter(vert_conn[v0], vert_conn[v1]).empty());
+        auto flag = prism::tet::split_edge(pc, option, vert_attrs, tet_attrs, vert_conn, v0, v1);
+        if (flag) {
+            cnt++;
+        }
+    }
+
+    return cnt;
+}
 int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
@@ -221,6 +275,8 @@ int collapse_pass(
     prism::tet::logger().info("Size {} {}", vert_info.size(), tet_info.size());
     return cnt;
 }
+
+
 
 int vertexsmooth_pass(
     PrismCage* pc,

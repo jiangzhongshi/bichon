@@ -56,7 +56,7 @@ auto checker_in_main = [](const auto& pc, const auto& option, bool enable) {
     spdlog::info("Verifier: Done Checking");
 };
 
-TEST_CASE("amr-sphere-prepare")
+TEST_CASE("amr-sphere-basic-split")
 {
     using namespace prism::tet;
     std::string filename = "../tests/data/sphere_40.obj.h5";
@@ -75,13 +75,10 @@ TEST_CASE("amr-sphere-prepare")
                 if (arr[i] > arr[i + 1]) return false;
         return true;
     };
-    assert(check_sorted());
+    REQUIRE(check_sorted());
     split_edge(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0, 1);
     spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
-    assert(check_sorted());
-    assert(check_sorted());
-    // smooth_vertex(pc.get(), option, vert_info, tet_info, vert_tet_conn, 46);
-    // spdlog::info("Size {} {}", vert_info.size(), tet_info.size());
+    REQUIRE(check_sorted());
 }
 
 TEST_CASE("sphere-coarsen-aggresive")
@@ -120,60 +117,6 @@ TEST_CASE("sphere-coarsen-aggresive")
     }
 }
 
-int edge_split_pass_for_dof(
-    PrismCage* pc,
-    prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_attrs,
-    prism::tet::tet_info_t& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn)
-{
-    // pick the middle of minimum (3) with max-collapsing allowed.
-    const auto bad_quality = (option.collapse_quality_threshold + 3)/2;
-
-    auto cnt = 0;
-    std::vector<bool> quality_due(tet_attrs.size(), false);
-    auto local_edges =
-        std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
-
-    std::set<std::pair<int, int>> all_edges;
-    for (auto i = 0; i < tet_attrs.size(); i++) {
-        if (tet_attrs[i].is_removed) continue;
-        auto& tet = tet_attrs[i].conn;
-        auto qual = prism::tet::tetra_quality(
-            vert_attrs[tet[0]].pos,
-            vert_attrs[tet[1]].pos,
-            vert_attrs[tet[2]].pos,
-            vert_attrs[tet[3]].pos);
-        if (qual > bad_quality) {
-            for (auto [i0, i1] : local_edges) {
-                auto v0 = tet[i0], v1 = tet[i1];
-                all_edges.emplace(std::min(v0, v1), std::max(v0, v1));
-            }
-            quality_due[i] = true;
-        }
-    }
-
-    // push queue
-    auto queue = std::priority_queue<std::tuple<double, int, int>>();
-    for (auto [v0, v1] : all_edges) {
-        auto len = (vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm();
-        queue.emplace(len, v0, v1);
-    }
-
-    while (!queue.empty()) {
-        auto [len, v0, v1] = queue.top();
-        queue.pop();
-        if ((vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm() != len) continue;
-
-        assert(!set_inter(vert_conn[v0], vert_conn[v1]).empty());
-        auto flag = prism::tet::split_edge(pc, option, vert_attrs, tet_attrs, vert_conn, v0, v1);
-        if (flag) {
-            cnt++;
-        }
-    }
-
-    return cnt;
-}
 
 auto barycentric_sizer_constructor = [](const auto& func) {
     auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
@@ -220,7 +163,7 @@ TEST_CASE("graded-sphere")
         prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
         prism::tet::edgeswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
         prism::tet::faceswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
-        edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
+        prism::tet::edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
         prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
         collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc.get());
@@ -291,68 +234,6 @@ TEST_CASE("loose-size")
         prism::tet::serializer("../buildr/temp.h5", pc.get(), vert_info, tet_info);
     }
     prism::tet::serializer("../buildr/loose-coarse.h5", pc.get(), vert_info, tet_info);
-}
-
-TEST_CASE("continue-coarsen")
-{
-    std::string filename = "../buildr/loose-coarse.h5";
-    auto pc = std::make_shared<PrismCage>(filename);
-    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
-    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 150;
-    prism::tet::logger().enable_backtrace(100);
-    auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
-    {
-        H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
-        auto bgV = H5Easy::load<RowMatd>(file, "V");
-        auto bgT = H5Easy::load<RowMati>(file, "T");
-        Eigen::VectorXd sizes(bgT.rows());
-        sizes.setConstant(1e2);
-        // assign size
-        RowMatd BC;
-        igl::barycenter(bgV, bgT, BC);
-        for (auto i = 0; i < bgT.rows(); i++) {
-            // if (BC(i, 0) > 0.9) sizes[i] = 5e-3;
-        }
-        sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
-    }
-    // edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
-    prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-    prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-    prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-    prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-    // prism::tet::logger().set_level(spdlog::level::trace);
-
-    prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
-    prism::tet::serializer("../buildr/temp.h5", pc.get(), vert_info, tet_info);
-}
-
-TEST_CASE("shell-disable")
-{
-    std::string filename = "../buildr/loose-coarse.h5";
-    auto pc = std::make_shared<PrismCage>(filename);
-    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
-    // pc.reset();
-    prism::local::RemeshOptions option(0, 0.1);
-
-    option.collapse_quality_threshold = 150;
-    prism::tet::logger().enable_backtrace(100);
-    auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
-    {
-        H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
-        auto bgV = H5Easy::load<RowMatd>(file, "V");
-        auto bgT = H5Easy::load<RowMati>(file, "T");
-        Eigen::VectorXd sizes(bgT.rows());
-        sizes.setConstant(1e-1);
-        // assign size
-        RowMatd BC;
-        igl::barycenter(bgV, bgT, BC);
-        for (auto i = 0; i < bgT.rows(); i++) {
-            // if (BC(i, 0) > 0.9) sizes[i] = 5e-3;
-        }
-        sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
-    }
-    prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
 }
 
 TEST_CASE("shell-only")

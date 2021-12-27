@@ -64,4 +64,11 @@ int vertexsmooth_pass(
     std::vector<std::vector<int>>& vert_tet_conn,
     double thick);
 
+
+int edge_split_pass_for_dof(
+    PrismCage* pc,
+    prism::local::RemeshOptions& option,
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn);
 } // namespace prism::tet
