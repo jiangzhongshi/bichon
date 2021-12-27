@@ -72,6 +72,12 @@ std::tuple<vert_info_t, tet_info_t, std::vector<std::vector<int>>> reload(
     std::string filename,
     const PrismCage* pc);
 
+std::vector<std::pair<int, int>> edge_adjacent_boundary_face(
+    const tet_info_t& tet_attrs,
+    const std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1);
+
 
 bool split_edge(
     PrismCage* pc,
@@ -121,6 +127,16 @@ bool collapse_edge(
     std::vector<std::vector<int>>& vert_conn,
     int v1_id,
     int v2_id,
+    double size_control);
+
+bool flip_edge_sf(
+    PrismCage* pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
     double size_control);
 
 void compact_tetmesh(

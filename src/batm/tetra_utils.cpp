@@ -228,7 +228,7 @@ void update_pc(
     }
 }
 
-std::vector<int> edge_adjacent_boundary_face(
+std::vector<std::pair<int, int>> edge_adjacent_boundary_face(
     const std::vector<TetAttr>& tet_attrs,
     const std::vector<std::vector<int>>& vert_conn,
     int v0,
@@ -237,13 +237,13 @@ std::vector<int> edge_adjacent_boundary_face(
     auto& nb0 = vert_conn[v0];
     auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
-    std::vector<int> bnd_pris;
+    std::vector<std::pair<int, int>> bnd_pris;
     for (auto t : affected) {
         for (auto j = 0; j < 4; j++) {
             if (tet_attrs[t].prism_id[j] != -1 // boundary
                 && tet_attrs[t].conn[j] != v0 //  contains v0 AND v1
                 && tet_attrs[t].conn[j] != v1) {
-                bnd_pris.push_back(tet_attrs[t].prism_id[j]);
+                bnd_pris.emplace_back(t, j);
             }
         }
     }
@@ -444,7 +444,8 @@ bool split_edge(
     if (p_vx != -1) {
         assert(bnd_pris.size() == 2);
         auto& F = pc->F;
-        auto f0 = bnd_pris.front(), f1 = bnd_pris.back();
+        auto f0 = tet_attrs[bnd_pris.front().first].prism_id[bnd_pris.front().second],
+             f1 = tet_attrs[bnd_pris.back().first].prism_id[bnd_pris.back().second];
         std::vector<int> old_fids = {f0, f1};
         moved_tris = std::vector<Vec3i>{F[f0], F[f1], F[f0], F[f1]};
         prism::tet::logger().trace("pvx {}", p_vx);
@@ -470,8 +471,8 @@ bool split_edge(
         }
 
         // distribute and assign new_tracks.
-        new_fid = {f0, f1, int(F.size()), int(F.size() + 1)};
-        update_pc(pc, {f0, f1}, new_fid, moved_tris, new_tracks);
+        new_fid = std::vector<int>{f0, f1, int(F.size()), int(F.size() + 1)};
+        update_pc(pc, std::vector<int>{f0, f1}, new_fid, moved_tris, new_tracks);
         assert(pc->mid.back() == vert_attrs.back().pos);
     }
 
@@ -846,6 +847,50 @@ bool tetmesh_sanity(
     return true;
 }
 
+auto common_tet_checkers = [](auto& option,
+                              auto& vert_attrs,
+                              auto& tet_attrs,
+                              auto& old_tets,
+                              auto& new_tets,
+                              auto& size_control) {
+    auto before_quality = compute_quality(vert_attrs, old_tets);
+    auto after_quality = compute_quality(vert_attrs, new_tets);
+    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality) {
+        prism::tet::logger().debug("<<<< (Tet Fail) Quality reject.");
+        return false;
+    }
+    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
+    if (after_size > size_control) {
+        prism::tet::logger().debug("<<<< (Tet Fail) Size reject.");
+        return false;
+    }
+    for (auto t : new_tets) {
+        if (!tetra_validity(vert_attrs, t)) {
+            prism::tet::logger().debug("<<<< (Tet Fail) Tet Invert.");
+            return false;
+        }
+    }
+    return true;
+};
+
+auto incident_surface_prism_fids = [](auto& vert_conn, auto& tet_attrs, auto v_id) {
+    auto nb = std::vector<int>();
+    for (auto t : vert_conn[v_id]) {
+        // prism::tet::logger().trace("conn {} \t {}", tet_attrs[t].conn,
+        // tet_attrs[t].prism_id);
+        assert(tet_attrs[t].is_removed == false);
+        for (auto j = 0; j < 4; j++) {
+            auto pid = tet_attrs[t].prism_id[j];
+            if (tet_attrs[t].conn[j] != v_id && pid != -1) {
+                // a surface adjacent to v1.
+                nb.push_back(pid);
+            }
+        }
+    }
+    std::sort(nb.begin(), nb.end());
+    return nb;
+};
+
 bool collapse_edge(
     PrismCage* pc,
     const prism::local::RemeshOptions& option,
@@ -880,7 +925,6 @@ bool collapse_edge(
     }
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
-    auto before_quality = compute_quality(vert_attrs, old_tets);
 
     std::vector<int> old_tids = nb1;
     std::vector<Vec4i> new_tets;
@@ -917,60 +961,31 @@ bool collapse_edge(
     }
 
     auto rollback = []() { return false; };
-    { // link condition TODO: HACK: not kosher
+    { // link condition TODO: HACK: not kosher, EC probably handles this.
         auto old_verts = std::set<int>();
         auto new_verts = std::set<int>();
         for (auto t : old_tets) old_verts.insert(t.begin(), t.end());
         for (auto t : new_tets) new_verts.insert(t.begin(), t.end());
         if (new_verts.size() != old_verts.size() - 1) {
+            throw std::runtime_error("Euler Characteristic Check should already handled this.");
             prism::tet::logger().debug("<<<< (Tet Fail) Violated link condition");
             return false;
         }
     }
 
-    auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality) {
-        prism::tet::logger().debug("<<<< (Tet Fail) Quality reject.");
-        return false;
-    }
-    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
-    if (after_size > size_control) {
-        prism::tet::logger().debug("<<<< (Tet Fail) Size reject.");
-        return false;
-    }
-    for (auto t : new_tets) {
-        if (!tetra_validity(vert_attrs, t)) {
-            prism::tet::logger().debug("<<<< (Tet Fail) Tet Invert.");
-            return false;
-        }
-    }
+    common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control);
+
     auto old_fid = std::vector<int>();
     auto new_fid = std::vector<int>();
     auto moved_tris = std::vector<Vec3i>();
-    auto nb_pids = [&vert_conn, &tet_attrs](auto v_id) {
-        auto nb = std::vector<int>();
-        for (auto t : vert_conn[v_id]) {
-            // prism::tet::logger().trace("conn {} \t {}", tet_attrs[t].conn,
-            // tet_attrs[t].prism_id);
-            assert(tet_attrs[t].is_removed == false);
-            for (auto j = 0; j < 4; j++) {
-                auto pid = tet_attrs[t].prism_id[j];
-                if (tet_attrs[t].conn[j] != v_id && pid != -1) {
-                    // a surface adjacent to v1.
-                    nb.push_back(pid);
-                }
-            }
-        }
-        std::sort(nb.begin(), nb.end());
-        return nb;
-    };
-
 
     if (pc != nullptr && !bnd_faces.empty()) {
-        for (auto f : bnd_faces) {
-            assert(pc->F[f][0] != -1);
+        for (auto [t, j] : bnd_faces) {
+            auto f = tet_attrs[t].prism_id[j];
+            assert(pc->F[f][0] != -1 && "Should not point to removed face");
         }
-        auto neighbor0 = nb_pids(v1_id), neighbor1 = nb_pids(v2_id);
+        auto neighbor0 = incident_surface_prism_fids(vert_conn, tet_attrs, v1_id),
+             neighbor1 = incident_surface_prism_fids(vert_conn, tet_attrs, v2_id);
         // prism::tet::logger().trace("NB0 {} NB1 {}", neighbor0, neighbor1);
         std::tie(old_fid, new_fid, moved_tris) = [&neighbor0,
                                                   &neighbor1,
@@ -1105,6 +1120,16 @@ bool swap_edge(
     return true;
 }
 
+auto find_other = [](const auto& tet, const auto& tri) {
+    for (auto vid : tet) {
+        auto ids = id_in_array(tri, vid);
+        if (ids == -1) {
+            return vid;
+        }
+    }
+    assert(false);
+    return -1;
+};
 
 // 2-3, internal only.
 bool swap_face(
@@ -1133,20 +1158,9 @@ bool swap_face(
     auto before_quality = compute_quality(vert_attrs, old_tets);
     // no top/bottom ordering of the two tets are assumed.
     auto t0 = affected.front(), t1 = affected.back();
-    auto find_other = [](const Vec4i& tet, const Vec3i& tri) {
-        for (auto j = 0; j < 4; j++) {
-            auto ids = id_in_array(tri, tet[j]);
-            if (ids == -1) {
-                return tet[j];
-            }
-        }
-        assert(false);
-        return -1;
-        // reorient
-        // return true;
-    };
-    auto u0 = find_other(tet_attrs[t0].conn, {v0_id, v1_id, v2_id});
-    auto u1 = find_other(tet_attrs[t1].conn, {v0_id, v1_id, v2_id});
+
+    auto u0 = find_other(tet_attrs[t0].conn, Vec3i{v0_id, v1_id, v2_id});
+    auto u1 = find_other(tet_attrs[t1].conn, Vec3i{v0_id, v1_id, v2_id});
 
     //
     auto new_tets = std::vector<Vec4i>{tet_attrs[t0].conn, tet_attrs[t0].conn, tet_attrs[t0].conn};
@@ -1248,5 +1262,105 @@ reload(std::string filename, const PrismCage* pc)
     spdlog::info("Loading v {}, t {} ", tet_v.rows(), tet_t.rows());
     return prism::tet::prepare_tet_info(pc, tet_v, tet_t, tet_v_pid);
 };
+
+bool flip_edge_sf(
+    PrismCage* pc,
+    const prism::local::RemeshOptions& option,
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
+    double size_control)
+{
+    auto& nb0 = vert_conn[v0];
+    auto& nb1 = vert_conn[v1];
+    auto affected = set_inter(nb0, nb1); // removed
+    assert(!affected.empty());
+    const auto vx = vert_attrs.size();
+
+    auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
+    if (bnd_faces.empty()) return false; // skip
+    assert(bnd_faces.size() == 2);
+    spdlog::critical("Entering Edge Flip new op: {} {}", v0, v1);
+
+    std::vector<Vec4i> old_tets(affected.size());
+    for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
+
+    std::vector<Vec4i> split_tets;
+    for (auto t : affected) {
+        split_tets.push_back(tet_attrs[t].conn);
+        replace(split_tets.back(), v0, vx);
+        split_tets.push_back(tet_attrs[t].conn);
+        replace(split_tets.back(), v1, vx);
+    }
+    assert(split_tets.size() == old_tets.size() * 2);
+
+    std::vector<Vec4i> new_tets;
+    auto cnt_newtid = 0;
+    auto u1 = [&]() {
+        auto [t, j] = bnd_faces.front();
+        auto& tet = tet_attrs[t].conn;
+        for (auto k = 0; k < 3; k++) {
+            auto v =
+                tet[(k + j + 1) % 4]; // vertex on the selected face, but different from {v0,v1}
+            if (v != v0 && v != v1) return v;
+        }
+        assert(false);
+        return -1;
+    }();
+
+    for (auto tet : split_tets) { // vx -> u1
+        auto vx_i = id_in_array(tet, vx);
+        auto u1_i = id_in_array(tet, u1);
+        assert(vx_i >= 0);
+        if (u1_i >= 0) continue; // the tets containing both are deleted.
+        tet[vx_i] = u1;
+        new_tets.emplace_back(tet);
+        cnt_newtid++;
+    }
+
+    common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control);
+    auto rollback = []() { return false; };
+
+    auto old_fid = std::vector<int>();
+    for (auto [t, j] : bnd_faces) {
+        old_fid.push_back(tet_attrs[t].prism_id[j]);
+    }
+    assert(old_fid.size() == 2);
+    auto new_fid = old_fid;
+    auto moved_tris = std::vector<Vec3i>();
+    {
+        auto f0 = old_fid.front(), f1 = old_fid.back();
+        moved_tris = {pc->F[f0], pc->F[f1]};
+        auto pv0 = vert_attrs[v0].mid_id, pv1 = vert_attrs[v1].mid_id;
+        auto pu0 = find_other(moved_tris[0], std::array<int, 2>{pv0, pv1}),
+             pu1 = find_other(moved_tris[1], std::array<int, 2>{pv0, pv1});
+        replace(moved_tris[0], pv1, pu1);
+        replace(moved_tris[1], pv0, pu0);
+    }
+
+    // prism::tet::logger().trace("moved tris {}", moved_tris);
+    std::vector<std::set<int>> new_tracks;
+    std::vector<RowMatd> local_cp;
+    auto flag = attempt_shell_operation(
+        *pc,
+        pc->track_ref,
+        option,
+        -1,
+        old_fid,
+        moved_tris,
+        new_tracks,
+        local_cp);
+    if (flag != 0) {
+        prism::tet::logger().debug("<<<<< Shell Collapse Fail for Shell Reason <{}>", flag);
+        return rollback();
+    }
+
+    update_pc(pc, old_fid, new_fid, moved_tris, new_tracks);
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
+    return true;
+}
+
 
 } // namespace prism::tet

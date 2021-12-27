@@ -137,8 +137,31 @@ int edgeswap_pass(
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
         edge_queue.pop();
-        auto flag =
-            prism::tet::swap_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, sizing);
+        auto bnd_faces = edge_adjacent_boundary_face(tet_info, vert_tet_conn, v0, v1);
+        auto flag = false;
+        if (bnd_faces.empty())
+            flag = prism::tet::swap_edge(
+                pc,
+                option,
+                vert_info,
+                tet_info,
+                vert_tet_conn,
+                v0,
+                v1,
+                sizing);
+        else {
+            assert(bnd_faces.size() == 2);
+            flag = prism::tet::flip_edge_sf(
+                pc,
+                option,
+                vert_info,
+                tet_info,
+                vert_tet_conn,
+                v0,
+                v1,
+                sizing);
+        }
+
         if (flag) cnt++;
     }
     prism::tet::logger().info("After E-swap, size {} {}", vert_info.size(), tet_info.size());
@@ -171,7 +194,7 @@ int collapse_pass(
                 auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
                 sizing = std::min(t_size, sizing);
             }
-            if (std::abs(len) >= 0.8 *0.8 * sizing) continue;
+            if (std::abs(len) >= 0.8 * 0.8 * sizing) continue;
             // spdlog::info("sizing {}, {}", len, sizing);
         }
         // erase v0
@@ -301,8 +324,7 @@ void serializer(
         });
     if (pc != nullptr) {
         pc->serialize(filename, saver);
-    }
-    else {
+    } else {
         auto file = H5Easy::File(filename, H5Easy::File::Overwrite);
         saver(file);
     }
