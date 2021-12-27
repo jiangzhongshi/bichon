@@ -182,19 +182,19 @@ int collapse_pass(
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
         edge_queue.pop();
-        // TODO: this does not prevent double testing-rejection. Slightly more time.
+        // TODO: this does not prevent double testing-rejection. Slightly more cost.
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
         {
-            auto sizing = 1.0;
+            auto sizing2 = 1.0;
             auto& nb1 = vert_tet_conn[v0];
             auto& nb2 = vert_tet_conn[v1];
             auto affected = set_inter(nb1, nb2);
             if (affected.empty()) continue;
             for (auto t : affected) {
                 auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
-                sizing = std::min(t_size, sizing);
+                sizing2 = std::min(t_size, sizing2);
             }
-            if (std::abs(len) >= 0.8 * 0.8 * sizing) continue;
+            if (std::abs(len) >= 0.8 * 0.8 * sizing2) continue; // only collapse over-short edges.
             // spdlog::info("sizing {}, {}", len, sizing);
         }
         // erase v0
@@ -365,14 +365,14 @@ void edge_split_pass_with_sizer(
         return mini;
     };
     while (!queue.empty()) {
-        auto [len, v0, v1] = queue.top();
+        auto [len2, v0, v1] = queue.top();
         queue.pop();
-        if ((vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
+        if ((vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len2) continue;
         auto nb = set_inter(vert_tet_conn[v0], vert_tet_conn[v1]);
         if (nb.empty()) continue;
-        auto size_due = [&nb, &len = len, &split_due]() {
+        auto size_due = [&nb, &len2 = len2, &split_due]() {
             for (auto s : nb) {
-                if (split_due[s] < len * 4 / 3.) return true;
+                if (split_due[s] < len2 * (16 / 9.)) return true;
             }
             return false;
         }();

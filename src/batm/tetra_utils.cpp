@@ -291,7 +291,6 @@ void update_tetra_conn(
     std::map<Vec3i, int> moved_pris_assigner;
     for (auto ti : affected) {
         tet_attrs[ti].is_removed = true;
-        tet_attrs[ti].conn.fill(-1); // easier for debug.
         for (auto j = 0; j < 4; j++) {
             auto pid = tet_attrs[ti].prism_id[j];
             if (pid != -1) {
@@ -317,11 +316,14 @@ void update_tetra_conn(
 
     // remove tets from VT.
     std::set<int> affected_verts;
-    for (auto& t : affected)
+    for (auto& t : affected) {
         for (auto i = 0; i < 4; i++) {
             affected_verts.insert(tet_attrs[t].conn[i]);
         }
+        tet_attrs[t].conn.fill(-1); // easier for debug.
+    }
     for (auto v : affected_verts) {
+        assert(!vert_conn[v].empty());
         auto diff = std::vector<int>();
         set_minus(vert_conn[v], affected, diff);
         vert_conn[v] = std::move(diff);
@@ -330,9 +332,9 @@ void update_tetra_conn(
     auto n_tet = tet_attrs.size();
     for (auto& t : new_tets) {
         for (auto i = 0; i < t.size(); i++) {
-            auto diff = std::vector<int>();
-            set_minus(vert_conn[t[i]], affected, diff);
-            vert_conn[t[i]] = std::move(diff);
+            // auto diff = std::vector<int>();
+            // set_minus(vert_conn[t[i]], affected, diff);
+            // vert_conn[t[i]] = std::move(diff);
 
             set_insert(vert_conn[t[i]], n_tet);
         }
@@ -872,15 +874,15 @@ bool tetmesh_sanity(
     return true;
 }
 
-auto common_tet_checkers = [](auto& option,
+auto common_tet_checkers = [](double quality_threshold,
                               auto& vert_attrs,
                               auto& tet_attrs,
                               auto& old_tets,
                               auto& new_tets,
-                              auto& size_control) {
+                              double size_control) {
     auto before_quality = compute_quality(vert_attrs, old_tets);
     auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (after_quality > option.collapse_quality_threshold && before_quality < after_quality) {
+    if (after_quality > quality_threshold && before_quality < after_quality) {
         prism::tet::logger().debug("<<<< (Tet Fail) Quality reject.");
         return false;
     }
@@ -999,7 +1001,7 @@ bool collapse_edge(
         }
     }
 
-    if (common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control) ==
+    if (common_tet_checkers(option.collapse_quality_threshold, vert_attrs, tet_attrs, old_tets, new_tets, size_control) ==
         false) {
         return rollback();
     }
@@ -1065,9 +1067,9 @@ bool collapse_edge(
         vert_attrs[v1_id].mid_id = vert_attrs[v2_id].mid_id;
     }
 
-    vert_conn[v1_id].clear();
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
 
+    vert_conn[v1_id].clear();
     vert_attrs[v1_id].pos.fill(0);
     vert_attrs[v1_id].mid_id = -1;
 
@@ -1093,7 +1095,7 @@ bool swap_edge(
     auto affected = set_inter(nb1, nb2);
     assert(!affected.empty());
     if (affected.size() != 3) {
-        prism::tet::logger().trace("Affect Neighbor Too Many {} (>2)", affected.size());
+        prism::tet::logger().trace("Do not swap edge with #neighbor {} (>2)", affected.size());
         return false;
     }
 
@@ -1197,19 +1199,10 @@ bool swap_face(
     replace(new_tets[1], v1_id, u1);
     replace(new_tets[2], v2_id, u1);
 
-    for (auto t : new_tets) {
-        if (!tetra_validity(vert_attrs, t)) return false;
-    }
-
-    auto after_quality = compute_quality(vert_attrs, new_tets);
-    if (before_quality < after_quality) return false;
-
-    auto after_size = max_tetra_sizes(vert_attrs, new_tets);
-    if (after_size > size_control) return false;
+    if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control)) return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc))
-        throw std::runtime_error("Sanity Error.");
+    if (!tetmesh_sanity(tet_attrs, vert_attrs, vert_conn, pc)) abort_and_debug("Sanity Error");
     return true;
 }
 
@@ -1311,6 +1304,10 @@ bool flip_edge_sf(
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
     if (bnd_faces.empty()) return false; // skip
     assert(bnd_faces.size() == 2);
+    if (bnd_faces.front().first == bnd_faces.back().first) {
+        return false; // same tet.
+    };
+    assert(affected.size() > 1);
     prism::tet::logger().debug("Entering Edge Flip new op: {} {}", v0, v1);
 
     std::vector<Vec4i> old_tets(affected.size());
@@ -1351,7 +1348,7 @@ bool flip_edge_sf(
 
     auto rollback = []() { return false; };
 
-    if (!common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control)) {
+    if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control)) {
         return rollback();
     }
 
