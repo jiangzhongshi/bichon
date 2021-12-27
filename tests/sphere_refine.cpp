@@ -136,6 +136,7 @@ int edge_split_pass_for_dof(
 
     std::set<std::pair<int, int>> all_edges;
     for (auto i = 0; i < tet_attrs.size(); i++) {
+        if (tet_attrs[i].is_removed) continue;
         auto& tet = tet_attrs[i].conn;
         auto qual = prism::tet::tetra_quality(
             vert_attrs[tet[0]].pos,
@@ -163,8 +164,11 @@ int edge_split_pass_for_dof(
         queue.pop();
         if ((vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm() != len) continue;
 
+        assert(!set_inter(vert_conn[v0], vert_conn[v1]).empty());
         auto flag = prism::tet::split_edge(pc, option, vert_attrs, tet_attrs, vert_conn, v0, v1);
-        if (flag) cnt++;
+        if (flag) {
+            cnt++;
+        }
     }
 
     return cnt;
@@ -221,6 +225,7 @@ TEST_CASE("graded-sphere")
         prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc.get());
     }
     prism::tet::serializer("../buildr/left.h5", pc.get(), vert_info, tet_info);
+
     return;
     {
         H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);

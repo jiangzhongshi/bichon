@@ -291,6 +291,7 @@ void update_tetra_conn(
     std::map<Vec3i, int> moved_pris_assigner;
     for (auto ti : affected) {
         tet_attrs[ti].is_removed = true;
+        tet_attrs[ti].conn.fill(-1); // easier for debug.
         for (auto j = 0; j < 4; j++) {
             auto pid = tet_attrs[ti].prism_id[j];
             if (pid != -1) {
@@ -386,6 +387,7 @@ bool split_edge(
     auto& nb0 = vert_conn[v0];
     auto& nb1 = vert_conn[v1];
     auto affected = set_inter(nb0, nb1); // removed
+    if (affected.empty()) return false;
     assert(!affected.empty());
     prism::tet::logger().debug(">>> Splitting {} {}", v0, v1);
     const auto vx = vert_attrs.size();
@@ -828,6 +830,29 @@ bool tetmesh_sanity(
             };
     }
 
+    // Check vert_tet_conn is correct
+    {
+        auto new_vt_conn = std::vector<std::vector<int>>(vert_attrs.size());
+        for (auto i = 0; i < tet_attrs.size(); i++) {
+            if (tet_attrs[i].is_removed) continue;
+            for (auto j = 0; j < 4; j++) {
+                new_vt_conn[tet_attrs[i].conn[j]].push_back(i);
+            }
+        }
+        for (auto i = 0; i < vert_attrs.size(); i++) {
+            auto& vt = new_vt_conn[i];
+            std::sort(vt.begin(), vt.end());
+            if (vt != vert_tet_conn[i]) {
+                prism::tet::logger().critical(
+                    "VT wrong for [{}] with recorded{} recompute{}",
+                    i,
+                    vert_tet_conn[i],
+                    vt);
+                return false;
+            }
+        }
+    }
+
     // check that mid is that same as pos
     for (auto i = 0; i < vert_attrs.size(); i++) {
         auto& v = vert_attrs[i];
@@ -967,13 +992,17 @@ bool collapse_edge(
         for (auto t : old_tets) old_verts.insert(t.begin(), t.end());
         for (auto t : new_tets) new_verts.insert(t.begin(), t.end());
         if (new_verts.size() != old_verts.size() - 1) {
-            throw std::runtime_error("Euler Characteristic Check should already handled this.");
+            // TODO:
+            // throw std::runtime_error("Euler Characteristic Check should already handled this.");
             prism::tet::logger().debug("<<<< (Tet Fail) Violated link condition");
             return false;
         }
     }
 
-    common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control);
+    if (common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control) ==
+        false) {
+        return rollback();
+    }
 
     auto old_fid = std::vector<int>();
     auto new_fid = std::vector<int>();
@@ -1282,7 +1311,7 @@ bool flip_edge_sf(
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
     if (bnd_faces.empty()) return false; // skip
     assert(bnd_faces.size() == 2);
-    spdlog::critical("Entering Edge Flip new op: {} {}", v0, v1);
+    prism::tet::logger().debug("Entering Edge Flip new op: {} {}", v0, v1);
 
     std::vector<Vec4i> old_tets(affected.size());
     for (auto i = 0; i < affected.size(); i++) old_tets[i] = tet_attrs[affected[i]].conn;
@@ -1320,8 +1349,12 @@ bool flip_edge_sf(
         cnt_newtid++;
     }
 
-    common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control);
     auto rollback = []() { return false; };
+
+    if (!common_tet_checkers(option, vert_attrs, tet_attrs, old_tets, new_tets, size_control)) {
+        return rollback();
+    }
+
 
     auto old_fid = std::vector<int>();
     for (auto [t, j] : bnd_faces) {
@@ -1359,6 +1392,7 @@ bool flip_edge_sf(
 
     update_pc(pc, old_fid, new_fid, moved_tris, new_tracks);
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
+    prism::tet::logger().debug("Successful Edge Flip", v0, v1);
     return true;
 }
 
