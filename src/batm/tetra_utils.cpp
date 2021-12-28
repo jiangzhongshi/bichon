@@ -436,6 +436,21 @@ bool split_edge(
         prism::tet::logger().trace("pusher {} {}", pc->top.back(), pc->base.back());
     }
 
+    auto minimum_edge = [&]() {
+        auto mini = 1.0;
+        auto local_edges =
+            std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+        for (auto conn : new_tets) {
+            for (auto [v0, v1] : local_edges) {
+                mini = std::min(
+                    mini,
+                    (vert_attrs[conn[v0]].pos - vert_attrs[conn[v1]].pos).squaredNorm());
+            }
+        }
+        return mini;
+    };
+    if (minimum_edge() < 1e-5) return rollback();
+
     for (auto t : new_tets) { // Vec4i
         if (!tetra_validity(vert_attrs, t)) {
             prism::tet::logger().debug("<<<< Split Fail with Tetra Validity");
@@ -470,6 +485,7 @@ bool split_edge(
             new_tracks,
             local_cp);
         if (flag != 0) {
+            // spdlog::dump_backtrace();
             prism::tet::logger().debug("<<<<< Split Fail for Shell <{}>", flag);
             return rollback();
         }
@@ -480,19 +496,7 @@ bool split_edge(
         assert(pc->mid.back() == vert_attrs.back().pos);
     }
 
-    auto minimum_edge = [&]() {
-        auto mini = 1.0;
-        auto local_edges =
-            std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
-        for (auto conn : new_tets) {
-            for (auto [v0, v1] : local_edges) {
-                mini = std::min(
-                    mini,
-                    (vert_attrs[conn[v0]].pos - vert_attrs[conn[v1]].pos).squaredNorm());
-            }
-        }
-        return mini;
-    };
+
     // prism::tet::logger().info("Created MinEdge {}", minimum_edge());
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
