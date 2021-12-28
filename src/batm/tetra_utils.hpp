@@ -51,6 +51,10 @@ struct VertAttr
 using vert_info_t = std::vector<prism::tet::VertAttr>;
 using tet_info_t = std::vector<prism::tet::TetAttr>;
 
+using tetmesh_t =
+    std::tuple<prism::tet::vert_info_t, prism::tet::tet_info_t, std::vector<std::vector<int>>>;
+
+
 /**
  *
  * @param pc
@@ -139,17 +143,9 @@ bool flip_edge_sf(
     int v1,
     double size_control);
 
-void compact_tetmesh(
-    std::vector<prism::tet::VertAttr>& vert_info,
-    std::vector<prism::tet::TetAttr>& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
-    PrismCage* pc = nullptr);
+void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc = nullptr);
 
-bool tetmesh_sanity(
-    const prism::tet::tet_info_t& tet_attrs,
-    const prism::tet::vert_info_t& vert_attrs,
-    const std::vector<std::vector<int>>& vert_tet_conn,
-    const PrismCage* pc);
+bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc);
 } // namespace prism::tet
 
 namespace prism::tet {

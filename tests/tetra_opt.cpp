@@ -17,7 +17,7 @@
 TEST_CASE("prepare-bunny-tetmesh")
 {
     // conforming tetmeshing.
-    std::string filename = "../buildr/00000006.obj.h5";
+    std::string filename = "../buildr/bunny.off.h5";
     auto pc = PrismCage(filename);
     RowMatd mT, mV, mB, vtop, vbase;
     RowMati mF;
@@ -91,54 +91,77 @@ auto barycentric_sizer_constructor = [](const auto& func) {
 
 TEST_CASE("feature-tet-coarsen")
 {
-    std::string filename = "../buildr/bunny-tet.h5";
+    std::string modelname = "../buildr/bunny.off";
+    std::string filename = modelname + ".h5.tet.h5";
     // std::string filename = "../buildr/bunny-tet-temp.h5";
     auto pc = std::make_shared<PrismCage>(filename);
-    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
+    auto tetmesh = prism::tet::reload(filename, pc.get());
 
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
+    option.distortion_bound = 1e-3;
 
     auto sizer = barycentric_sizer_constructor(
-        [](const auto& bc) { return (bc[0] < 0.3) ? std::pow(0.1, 2) : 1.0; });
-    option.collapse_quality_threshold = 30;
+        [](const auto& bc) { return (bc[0] < 0.1) ? std::pow(5e-2, 2) : 1.0; });
+    option.collapse_quality_threshold = 8;
     //  spdlog::set_level(spdlog::level::trace);
-    REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc.get()));
-    prism::tet::logger().enable_backtrace(100);
     for (auto i = 0; i < 5; i++) {
-        prism::tet::edge_split_pass_with_sizer(
-            pc.get(),
-            option,
-            vert_info,
-            tet_info,
-            vert_tet_conn,
-            sizer);
-        prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-        prism::tet::edgeswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
-        prism::tet::faceswap_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 1.);
-        prism::tet::edge_split_pass_for_dof(pc.get(), option, vert_info, tet_info, vert_tet_conn);
-        prism::tet::vertexsmooth_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, 0.1);
-
-        // prism::tet::serializer("before_collapse_debug.h5", pc.get(), vert_info, tet_info);
-        prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
-        prism::tet::compact_tetmesh(vert_info, tet_info, vert_tet_conn, pc.get());
-        prism::tet::serializer("../buildr/bunny-tet-temp.h5", pc.get(), vert_info, tet_info);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        prism::tet::serializer("../buildr/after_split.h5", pc.get(), tetmesh);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        prism::tet::serializer("../buildr/after_smooth.h5", pc.get(), tetmesh);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::serializer("../buildr/after_swap.h5", pc.get(), tetmesh);
+        prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
+        prism::tet::serializer("../buildr/after_dof.h5", pc.get(), tetmesh);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        prism::tet::serializer("../buildr/after_smooth2.h5", pc.get(), tetmesh);
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
+        prism::tet::compact_tetmesh(tetmesh, pc.get());
+        prism::tet::serializer("../buildr/after_collapse", pc.get(), tetmesh);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        prism::tet::serializer("../buildr/after_smooth3.h5", pc.get(), tetmesh);
+        REQUIRE(prism::tet::tetmesh_sanity(tetmesh, pc.get()));
     }
-    prism::tet::serializer("../buildr/bunny-tet-coarse.h5", pc.get(), vert_info, tet_info);
+    prism::tet::serializer(modelname + ".left.h5", pc.get(), tetmesh);
 }
 
-TEST_CASE("single-debug-feature-tet")
+TEST_CASE("feature-tet-right")
 {
-    std::string filename = "before_collapse_debug.h5";
+    std::string modelname = "../buildr/bunny.off";
+    std::string filename = modelname + ".left.h5";
     auto pc = std::make_shared<PrismCage>(filename);
-    auto [vert_info, tet_info, vert_tet_conn] = prism::tet::reload(filename, pc.get());
+    auto tetmesh = prism::tet::reload(filename, pc.get());
 
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
+    option.distortion_bound = 1e-3;
 
     auto sizer = barycentric_sizer_constructor(
-        [](const auto& bc) { return (bc[0] < 0.3) ? std::pow(5e-2, 2) : 1.0; });
-    option.collapse_quality_threshold = 30;
-    //  spdlog::set_level(spdlog::level::trace);
-    REQUIRE(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc.get()));
-    prism::tet::logger().enable_backtrace(100);
-    prism::tet::collapse_pass(pc.get(), option, vert_info, tet_info, vert_tet_conn, sizer);
+        [](const auto& bc) { return (bc[0] > 0.85) ? std::pow(5e-2, 2) : 1.0; });
+    option.collapse_quality_threshold = 20;
+    auto saver = [&tetmesh = tetmesh, &pc](int i, std::string name) {
+        std::string prefix = "../buildr/right/";
+        prism::tet::serializer(fmt::format("{}_{}_{}.h5", prefix, i, name), pc.get(), tetmesh);
+    };
+    for (auto i = 0; i < 5; i++) {
+        if (i >= 3) option.collapse_quality_threshold = 8;
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        saver(i, "sp");
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        saver(i, "sm1");
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+        saver(i, "sw");
+        prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
+        saver(i, "spd");
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        saver(i, "sm2");
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
+        prism::tet::compact_tetmesh(tetmesh, pc.get());
+        saver(i, "col");
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        saver(i, "sm3");
+        REQUIRE(prism::tet::tetmesh_sanity(tetmesh, pc.get()));
+    }
+    prism::tet::serializer(modelname + ".right.h5", pc.get(), tetmesh);
 }

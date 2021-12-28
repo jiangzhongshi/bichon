@@ -741,13 +741,9 @@ bool smooth_vertex(
     return true;
 }
 
-bool tetmesh_sanity(
-    const std::vector<TetAttr>& tet_attrs,
-    const std::vector<VertAttr>& vert_attrs,
-    const std::vector<std::vector<int>>& vert_tet_conn,
-    const PrismCage* pc)
+bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc)
 {
-    return true;
+    const auto& [vert_attrs, tet_attrs, vert_tet_conn] = tetmesh;
     for (auto& tet : tet_attrs) {
         if (tet.is_removed) continue;
         if (!tetra_validity(vert_attrs, tet.conn)) {
@@ -1003,8 +999,13 @@ bool collapse_edge(
         }
     }
 
-    if (common_tet_checkers(option.collapse_quality_threshold, vert_attrs, tet_attrs, old_tets, new_tets, size_control) ==
-        false) {
+    if (common_tet_checkers(
+            option.collapse_quality_threshold,
+            vert_attrs,
+            tet_attrs,
+            old_tets,
+            new_tets,
+            size_control) == false) {
         return rollback();
     }
 
@@ -1071,7 +1072,14 @@ bool collapse_edge(
 
     std::sort(full_old_tid.begin(), full_old_tid.end());
 
-    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, full_old_tid, full_new_tets, new_fid, moved_tris);
+    update_tetra_conn(
+        vert_attrs,
+        tet_attrs,
+        vert_conn,
+        full_old_tid,
+        full_new_tets,
+        new_fid,
+        moved_tris);
 
     vert_conn[v1_id].clear();
     vert_attrs[v1_id].pos.fill(0);
@@ -1201,19 +1209,17 @@ bool swap_face(
     replace(new_tets[1], v1_id, u1);
     replace(new_tets[2], v2_id, u1);
 
-    if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control)) return false;
+    if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control))
+        return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
     return true;
 }
 
 
-void compact_tetmesh(
-    std::vector<prism::tet::VertAttr>& vert_info,
-    std::vector<prism::tet::TetAttr>& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
-    PrismCage* pc)
+void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     //
     auto vert_map_old2new = std::vector<int>(vert_info.size(), -1);
     auto real_vnum = 0, real_tnum = 0;

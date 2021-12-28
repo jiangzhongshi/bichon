@@ -1,6 +1,7 @@
 #include "tetra_remesh_pass.hpp"
 
 #include "prism/PrismCage.hpp"
+#include "prism/geogram/AABB.hpp"
 #include "prism/local_operations/remesh_pass.hpp"
 #include "tetra_logger.hpp"
 #include "tetra_utils.hpp"
@@ -96,11 +97,10 @@ std::priority_queue<std::tuple<double, int, int, int>> construct_face_queue(
 int faceswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_info,
-    prism::tet::tet_info_t& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
+    prism::tet::tetmesh_t& tetmesh,
     double sizing)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto face_queue = construct_face_queue(vert_info, tet_info);
     auto cnt = 0;
     prism::tet::logger().info("Face Swap: mesh size {} {}", vert_info.size(), tet_info.size());
@@ -126,11 +126,10 @@ int faceswap_pass(
 int edgeswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_info,
-    prism::tet::tet_info_t& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
+    prism::tet::tetmesh_t& tetmesh,
     double sizing)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto edge_queue = construct_edge_queue(vert_info, tet_info);
     prism::tet::logger().info("Edge Swap: queue size {}", edge_queue.size());
     auto cnt = 0;
@@ -171,27 +170,26 @@ int edgeswap_pass(
 int edge_split_pass_for_dof(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_attrs,
-    prism::tet::tet_info_t& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn)
+    prism::tet::tetmesh_t& tetmesh)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     // pick the middle of minimum (3) with max-collapsing allowed.
-    const auto bad_quality = (option.collapse_quality_threshold + 3) / 2;
+    const auto bad_quality = option.collapse_quality_threshold;
 
     auto cnt = 0;
-    std::vector<bool> quality_due(tet_attrs.size(), false);
+    std::vector<bool> quality_due(tet_info.size(), false);
     auto local_edges =
         std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
 
     std::set<std::pair<int, int>> all_edges;
-    for (auto i = 0; i < tet_attrs.size(); i++) {
-        if (tet_attrs[i].is_removed) continue;
-        auto& tet = tet_attrs[i].conn;
+    for (auto i = 0; i < tet_info.size(); i++) {
+        if (tet_info[i].is_removed) continue;
+        auto& tet = tet_info[i].conn;
         auto qual = prism::tet::tetra_quality(
-            vert_attrs[tet[0]].pos,
-            vert_attrs[tet[1]].pos,
-            vert_attrs[tet[2]].pos,
-            vert_attrs[tet[3]].pos);
+            vert_info[tet[0]].pos,
+            vert_info[tet[1]].pos,
+            vert_info[tet[2]].pos,
+            vert_info[tet[3]].pos);
         if (qual > bad_quality) {
             for (auto [i0, i1] : local_edges) {
                 auto v0 = tet[i0], v1 = tet[i1];
@@ -204,17 +202,17 @@ int edge_split_pass_for_dof(
     // push queue
     auto queue = std::priority_queue<std::tuple<double, int, int>>();
     for (auto [v0, v1] : all_edges) {
-        auto len = (vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm();
+        auto len = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
         queue.emplace(len, v0, v1);
     }
 
     while (!queue.empty()) {
         auto [len, v0, v1] = queue.top();
         queue.pop();
-        if ((vert_attrs[v0].pos - vert_attrs[v1].pos).squaredNorm() != len) continue;
+        if ((vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
 
-        assert(!set_inter(vert_conn[v0], vert_conn[v1]).empty());
-        auto flag = prism::tet::split_edge(pc, option, vert_attrs, tet_attrs, vert_conn, v0, v1);
+        assert(!set_inter(vert_tet_conn[v0], vert_tet_conn[v1]).empty());
+        auto flag = prism::tet::split_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1);
         if (flag) {
             cnt++;
         }
@@ -226,15 +224,23 @@ int edge_split_pass_for_dof(
 int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_info,
-    prism::tet::tet_info_t& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
+    prism::tet::tetmesh_t& tetmesh,
     const std::unique_ptr<prism::tet::SizeController>& sizer)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto edge_queue = construct_collapse_queue(vert_info, tet_info);
     prism::tet::logger().info("Edge Collapse: queue size {}", edge_queue.size());
     auto cnt = 0;
     auto previous = std::array<int, 2>{-1, -1};
+    auto pc_skip = std::vector<bool>(pc->mid.size(), false);
+    if (pc != nullptr) {
+        for (auto [m, ignore] : pc->meta_edges) {
+            auto [v0, v1] = m;
+            pc_skip[v0] = true;
+            pc_skip[v1] = true;
+        }
+        for (int i = 0; i < pc->ref.aabb->num_freeze; i++) pc_skip[i] = true;
+    }
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
         edge_queue.pop();
@@ -256,6 +262,10 @@ int collapse_pass(
         }
         previous = {v0, v1};
         // erase v0
+        auto pv0 = vert_info[v0].mid_id;
+        if (pv0 != -1 && pc_skip[pv0]) { // shell freezed vertices are not subject to collapse
+            continue;
+        }
         auto suc =
             prism::tet::collapse_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, 1.0);
         if (!suc) continue;
@@ -288,11 +298,10 @@ int collapse_pass(
 int vertexsmooth_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_info,
-    prism::tet::tet_info_t& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
+    prism::tet::tetmesh_t& tetmesh,
     double thick)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     std::vector<bool> snap_flag(pc->mid.size(), false);
     auto total_cnt = 0;
     for (auto v0 = 0; v0 < vert_info.size(); v0++) {
@@ -333,12 +342,9 @@ int vertexsmooth_pass(
 }
 
 
-void serializer(
-    std::string filename,
-    const PrismCage* pc,
-    const prism::tet::vert_info_t& vert_info,
-    const prism::tet::tet_info_t& tet_info)
+void serializer(std::string filename, const PrismCage* pc, const prism::tet::tetmesh_t& tetmesh)
 {
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto convert_to_VT = [](auto& vert_info, auto& tet_info) {
         RowMatd V(vert_info.size(), 3);
         RowMati T(tet_info.size(), 4);
@@ -393,16 +399,14 @@ void serializer(
     }
 }
 
-
 void edge_split_pass_with_sizer(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
-    prism::tet::vert_info_t& vert_info,
-    prism::tet::tet_info_t& tet_info,
-    std::vector<std::vector<int>>& vert_tet_conn,
+    prism::tet::tetmesh_t& tetmesh,
     const std::unique_ptr<prism::tet::SizeController>& sizer)
 {
-    // split_pass();
+    auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
+
     std::vector<double> split_due(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
@@ -413,7 +417,7 @@ void edge_split_pass_with_sizer(
     auto queue = construct_edge_queue(vert_info, tet_info);
     auto timestamp = 0;
     assert(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc));
-    auto minimum_edge = [&]() {
+    auto minimum_edge = [&, &vert_info = vert_info, &tet_info = tet_info]() {
         auto mini = 1.0;
         auto local_edges =
             std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
