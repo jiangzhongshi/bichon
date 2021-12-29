@@ -33,8 +33,8 @@ std::priority_queue<std::tuple<double, int, int>> construct_collapse_queue(
         if (tet.is_removed) continue;
         for (auto e : local_edges) {
             auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-            // if (v0 > v1) continue;
             edge_set.emplace(v0, v1);
+            edge_set.emplace(v1, v0);
         }
     }
     auto edge_queue = std::priority_queue<std::tuple<double, int, int>>(); // max queue, but we want
@@ -59,8 +59,7 @@ std::priority_queue<std::tuple<double, int, int>> construct_edge_queue(
         if (tet.is_removed) continue;
         for (auto e : local_edges) {
             auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-            if (v0 > v1) continue;
-            edge_set.emplace(v0, v1);
+            edge_set.emplace(std::min(v0, v1), std::max(v0,v1));
         }
     }
     auto edge_queue = std::priority_queue<std::tuple<double, int, int>>();

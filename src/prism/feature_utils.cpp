@@ -657,7 +657,6 @@ void prism::split_feature_ears(RowMatd &mV, RowMati &mF,
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/squared_distance_3.h>
-#include <geogram/mesh/mesh_AABB.h>
 bool prism::feature_sanity(const RowMatd &mV, RowMati &mE) {
   double angle = 0.98;
   double length = 1e-4;
@@ -687,7 +686,6 @@ bool prism::feature_sanity(const RowMatd &mV, RowMati &mE) {
     if (d < length) return true;
     return false;
   };
-  std::vector<GEO::Box> boxes;
   auto num_e = mE.rows();
   for (auto i = 0; i < num_e; i++) {
     if (mE(i, 0) == -1) continue;

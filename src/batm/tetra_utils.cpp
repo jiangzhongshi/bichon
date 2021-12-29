@@ -1313,9 +1313,13 @@ bool flip_edge_sf(
     const auto vx = vert_attrs.size();
 
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
-    if (bnd_faces.empty()) return false; // skip
+    if (bnd_faces.empty()) { 
+        prism::tet::logger().trace("bnd_faces.empty Flip new op: {} {}", v0, v1);
+        return false; // skip
+    }
     assert(bnd_faces.size() == 2);
     if (bnd_faces.front().first == bnd_faces.back().first) {
+        prism::tet::logger().trace("Failed entering Edge Flip new op: {} {}", v0, v1);
         return false; // same tet.
     };
     assert(affected.size() > 1);

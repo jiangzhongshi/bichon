@@ -120,7 +120,7 @@ TEST_CASE("graded-sphere")
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 6;
+    option.collapse_quality_threshold = 10;
     prism::tet::logger().enable_backtrace(100);
 
     auto sizer = barycentric_sizer_constructor([](const auto& bc) {
@@ -141,19 +141,24 @@ TEST_CASE("graded-sphere")
     prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
     prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer2);
 
-    for (auto i = 0; i < 5; i++) {
+    auto swapper = [&](){
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+    };
+    for (auto i = 0; i < 10; i++) {
         prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
         saver(i, "split");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "smooth");
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+        swapper();
         saver(i, "swap");
         prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
         saver(i, "dof");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "smooth2");
         prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
+        swapper();
+        saver(i, "swap2");
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         saver(i, "collapse");
     }
@@ -228,10 +233,22 @@ TEST_CASE("shell-only")
     for (auto repeat = 0; repeat < 5; repeat++) prism::local::localsmooth_pass(*pc, option);
 
     pc->serialize("../buildr/after_smooth.h5");
-    // spdlog::set_level(spdlog::level::trace);
     prism::local::wildcollapse_pass(*pc, option);
     prism::local::wildcollapse_pass(*pc, option);
     for (auto repeat = 0; repeat < 5; repeat++) prism::local::localsmooth_pass(*pc, option);
     prism::local::wildcollapse_pass(*pc, option);
     pc->serialize("../buildr/after_collapse.h5");
+}
+
+TEST_CASE("debug-swap")
+{
+    std::string filename = "/Users/zhongshi/Workspace/bichon/buildr/sphere-_4_collapse.h5";
+    auto pc = std::make_shared<PrismCage>(filename);
+    auto tetmesh = prism::tet::reload(filename, pc.get());
+    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
+    option.collapse_quality_threshold = 150;
+    prism::tet::logger().enable_backtrace(100);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+    prism::tet::serializer("../buildr/after_swap.h5", pc.get(), tetmesh);
 }
