@@ -6,20 +6,8 @@
 /// @brief An entry into the hash grid as a (key, value) pair.
 
 #include "../common.hpp"
-namespace GEO {
-class Box;
-};
-namespace prism {
-struct HashItem {
-  int key;  /// @brief The key of the item.
-  int id;   /// @brief The value of the item.
-  std::shared_ptr<GEO::Box>
-      aabb;  /// @brief The axis-aligned bounding box of the element
-  HashItem(int key, int id) : key(key), id(id) {}
 
-  /// @brief Compare HashItems by their keys for sorting.
-  bool operator<(const HashItem &other) const;
-};
+namespace prism {
 
 using HashMap =
     std::map<std::tuple<long, long, long>, std::shared_ptr<std::list<int>>>;

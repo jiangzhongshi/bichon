@@ -1,13 +1,9 @@
 #include "AABB_hash.hpp"
 
-#include <geogram/basic/geometry.h>
 #include <igl/avg_edge_length.h>
 #include <spdlog/spdlog.h>
 #include <numeric>
 
-bool prism::HashItem::operator<(const prism::HashItem &other) const {
-  return std::tie(key, id) < std::tie(other.key, other.id);
-}
 
 prism::HashGrid::HashGrid(const std::vector<Vec3d> &V,
                           const std::vector<Vec3i> &F, bool filled)

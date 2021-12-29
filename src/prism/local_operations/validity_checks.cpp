@@ -1,5 +1,6 @@
 #include "validity_checks.hpp"
 
+#include <geogram/basic/geometry.h>
 #include <geogram/numerics/predicates.h>
 #include <igl/Timer.h>
 #include <igl/euler_characteristic.h>
@@ -29,6 +30,22 @@
 #include "prism/common.hpp"
 #include "prism/polyshell_utils.hpp"
 #include "remesh_pass.hpp"
+
+constexpr auto make_box = [](const auto& verts, const auto& tri) -> std::pair<Vec3d, Vec3d> {
+    RowMat3d local;
+    for (auto k = 0; k < 3; k++) local.row(k) = verts[tri[k]];
+    Vec3d xyz_min = local.colwise().minCoeff();
+    Vec3d xyz_max = local.colwise().maxCoeff();
+    return std::pair(xyz_min, xyz_max);
+};
+
+constexpr auto bbox_overlap = [](const auto& box_a, const auto& box_b) -> bool {
+  for (auto k=0; k<3; k++) {
+    if (box_a.second[k] < box_b.first[k]) return false;
+    if (box_b.second[k] < box_a.first[k]) return false;
+  }
+  return true;
+};
 
 namespace prism::local_validity {
 
@@ -81,12 +98,23 @@ bool dynamic_intersect_check(
     return false; // TODO prove this complete, one vertex touch requires
                   // reduced collision check.
   };
+
+
   constexpr auto intersection = [](const auto &V, const auto &Fc, auto &f) {
     auto &[p0, p1, p2] = Fc;
     auto &[q0, q1, q2] = f;
-    return prism::predicates::triangle_triangle_overlap({V[p0], V[p1], V[p2]},
-                                                        {V[q0], V[q1], V[q2]});
+    auto box_p = make_box(V, Fc);
+    auto box_q = make_box(V, f);
+
+    if (bbox_overlap(box_p, box_q) == false)
+        return false;
+    // TODO: maybe Octree HashGrid??
+    return prism::predicates::triangle_triangle_overlap(
+        {V[p0], V[p1], V[p2]},
+        {V[q0], V[q1], V[q2]});
   };
+
+
   igl::Timer timer;
   timer.start();
   for (int i = 0; i < tris.size(); i++) {
@@ -96,14 +124,12 @@ bool dynamic_intersect_check(
         return false;
     }
   }
+
   for (auto f : tris) {
-    RowMat3d local;
-    for (auto k : {0, 1, 2})
-      local.row(k) = base[f[k]];
-    std::set<int> candidates;
-    grid.query(local.colwise().minCoeff(), local.colwise().maxCoeff(),
-               candidates);
-    std::vector<int> result;
+      auto box = make_box(base, f);
+      std::set<int> candidates;
+      grid.query(box.first, box.second, candidates);
+      std::vector<int> result;
     std::set_difference(candidates.begin(), candidates.end(), removed.begin(),
                         removed.end(), std::back_inserter(result));
     if (result.empty()) {
