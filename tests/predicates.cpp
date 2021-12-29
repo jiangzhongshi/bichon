@@ -11,14 +11,22 @@
 #include "prism/predicates/positive_prism_volume_12.hpp"
 #include "prism/predicates/triangle_triangle_intersection.hpp"
 
+#include <igl/predicates/predicates.h>
 TEST_CASE("tetra-sanity") {
   prism::geo::init_geogram();
+  igl::predicates::exactinit();
   Vec3d t0 = STANDARD_PRISM[0];
   Vec3d t1 = STANDARD_PRISM[1];
   Vec3d t2 = STANDARD_PRISM[2];
   Vec3d t3 = STANDARD_PRISM[3];
 
   Vec3d ave = (t0 + t1 + t2 + t3) / 4;
+
+  SUBCASE("igl sign") {
+    // this is inverted from my usual understanding
+    REQUIRE_EQ(igl::predicates::orient3d(t0, t1, t2, t3), igl::predicates::Orientation::NEGATIVE);
+    REQUIRE_EQ(igl::predicates::orient3d(t0, t1, t2, t2), igl::predicates::Orientation::DEGENERATE);
+  }
 
   SUBCASE("Point in Tet") {
     // make sure the overall order is not screwed
