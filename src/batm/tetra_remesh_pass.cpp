@@ -481,7 +481,7 @@ void edge_split_pass_with_sizer(
         }
         for (auto [v0, v1] : edge_set) {
             auto len2 = (vert_info[v0].pos - vert_info[v1].pos).squaredNorm();
-            queue.emplace(len2, v0, v1);
+            // queue.emplace(len2, v0, v1);
         }
         timestamp++;
         if (timestamp % 1000 == 0) {
