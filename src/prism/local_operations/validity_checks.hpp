@@ -25,7 +25,7 @@ enum PolyOpError {
   kTwoFeature,
   kSubVolume,
   kSubIntersect,
-  kDistort,
+  kDistort, // 8
   kCurve,
   kFeature,
   kOthers,

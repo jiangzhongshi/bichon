@@ -203,16 +203,17 @@ std::optional<std::pair<Vec3d, Vec3d>> prism::zoom(
     const std::vector<int>& nb,
     const std::vector<int>& nbi, int vid,
     double target_thickness) {
-  double target_base = 0, target_top = 0;
-  int nb_num = nb.size();
+  auto target_base = 0., target_top = 0., nb_len = 0.;
+  auto nb_num = nb.size();
   for (int i = 0; i < nb.size(); i++) {
     auto v1 = F[nb[i]][(nbi[i] + 1) % 3];
     target_base += (base[v1] - mid[v1]).norm();
     target_top += (top[v1] - mid[v1]).norm();
+    nb_len += (mid[v1] - mid[vid]).norm();
   }
   Vec3d cur_normal = (top[vid] - base[vid]).stableNormalized();
-  return std::pair(mid[vid] - std::min(target_thickness, 1.5*target_base/nb.size()) * cur_normal,
-                   mid[vid] + std::min(target_thickness, 1.5*target_top/nb.size()) * cur_normal);
+  return std::pair(mid[vid] - std::min(nb_len/nb.size(), 1.5*target_base/nb.size()) * cur_normal,
+                   mid[vid] + std::min(nb_len/nb.size(), 1.5*target_top/nb.size()) * cur_normal);
 }
 
 std::optional<Vec3d> prism::smoother_location_legacy(

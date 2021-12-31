@@ -2,6 +2,7 @@
 
 #include <batm/tetra_logger.hpp>
 #include <batm/tetra_utils.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <prism/common.hpp>
 #include <prism/geogram/AABB.hpp>
 #include <prism/geogram/geogram_utils.hpp>
@@ -23,6 +24,7 @@
 #include <highfive/H5Easy.hpp>
 #include <iterator>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <numeric>
 #include <queue>
 #include <tuple>
@@ -117,10 +119,18 @@ auto barycentric_sizer_constructor = [](const auto& func) {
 TEST_CASE("graded-sphere")
 {
     std::string filename = "../buildr/coarse.h5";
+    nlohmann::json config;
+    {
+        auto file = (std::ifstream("../tests/graded-sphere-test-config.json"));
+        file >> config;
+        filename = config["filename"];
+    }
+    spdlog::info("Read filename {}", filename);
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
     option.collapse_quality_threshold = 10;
+    option.distortion_bound = 1e-3;
     prism::tet::logger().enable_backtrace(100);
 
     auto sizer = barycentric_sizer_constructor([](const auto& bc) {
@@ -132,16 +142,14 @@ TEST_CASE("graded-sphere")
         if (x < 0.05) len = 5e-3;
         return std::pow(len, 2);
     });
-    auto saver = [&tetmesh = tetmesh, &pc](int i, std::string name) {
-        std::string prefix = "../buildr/sphere-";
+    std::string prefix = filename + "-";
+    auto saver = [&tetmesh = tetmesh, &pc, prefix](int i, std::string name) {
         prism::tet::serializer(fmt::format("{}_{}_{}.h5", prefix, i, name), pc.get(), tetmesh);
     };
 
     auto sizer2 = barycentric_sizer_constructor([](const auto& bc) { return 1.0; });
-    prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
-    prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer2);
 
-    auto swapper = [&](){
+    auto swapper = [&]() {
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
     };
@@ -248,7 +256,7 @@ TEST_CASE("debug-swap")
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
     option.collapse_quality_threshold = 150;
     prism::tet::logger().enable_backtrace(100);
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+    prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
+    prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
     prism::tet::serializer("../buildr/after_swap.h5", pc.get(), tetmesh);
 }

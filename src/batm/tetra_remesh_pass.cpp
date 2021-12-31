@@ -59,7 +59,7 @@ std::priority_queue<std::tuple<double, int, int>> construct_edge_queue(
         if (tet.is_removed) continue;
         for (auto e : local_edges) {
             auto v0 = tet.conn[e[0]], v1 = tet.conn[e[1]];
-            edge_set.emplace(std::min(v0, v1), std::max(v0,v1));
+            edge_set.emplace(std::min(v0, v1), std::max(v0, v1));
         }
     }
     auto edge_queue = std::priority_queue<std::tuple<double, int, int>>();
@@ -415,7 +415,7 @@ void edge_split_pass_with_sizer(
 
     auto queue = construct_edge_queue(vert_info, tet_info);
     auto timestamp = 0;
-    assert(prism::tet::tetmesh_sanity(tet_info, vert_info, vert_tet_conn, pc));
+    assert(prism::tet::tetmesh_sanity(tetmesh, pc));
     auto minimum_edge = [&, &vert_info = vert_info, &tet_info = tet_info]() {
         auto mini = 1.0;
         auto local_edges =
@@ -456,7 +456,11 @@ void edge_split_pass_with_sizer(
         //     pc->F.size(),
         //     minimum_edge());
         auto suc = prism::tet::split_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1);
-        if (!suc) continue;
+        if (!suc) {
+            prism::tet::logger().warn("Split Fail");
+            prism::tet::logger().dump_backtrace();
+            continue;
+        }
         auto new_tid = std::vector<int>();
         for (auto i = old_tid; i < tet_info.size(); i++) {
             new_tid.push_back(i);

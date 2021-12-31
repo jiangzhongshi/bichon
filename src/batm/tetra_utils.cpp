@@ -449,7 +449,10 @@ bool split_edge(
         }
         return mini;
     };
-    if (minimum_edge() < 1e-5) return rollback();
+    if (minimum_edge() < 1e-10) {
+        prism::tet::logger().debug("minimum edge too short");
+        return rollback();
+    }
 
     for (auto t : new_tets) { // Vec4i
         if (!tetra_validity(vert_attrs, t)) {

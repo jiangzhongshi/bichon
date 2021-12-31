@@ -1,7 +1,4 @@
 #include <doctest.h>
-#include <igl/Timer.h>
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/spdlog.h>
 
 #include <prism/cgal/triangle_triangle_intersection.hpp>
 #include <prism/geogram/geogram_utils.hpp>
@@ -12,6 +9,12 @@
 #include "prism/predicates/triangle_triangle_intersection.hpp"
 
 #include <igl/predicates/predicates.h>
+#include <geogram/basic/geometry.h>
+#include <igl/Timer.h>
+#include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
+#include <geogram/numerics/predicates.h>
+
 TEST_CASE("tetra-sanity") {
   prism::geo::init_geogram();
   igl::predicates::exactinit();
@@ -26,6 +29,7 @@ TEST_CASE("tetra-sanity") {
     // this is inverted from my usual understanding
     REQUIRE_EQ(igl::predicates::orient3d(t0, t1, t2, t3), igl::predicates::Orientation::NEGATIVE);
     REQUIRE_EQ(igl::predicates::orient3d(t0, t1, t2, t2), igl::predicates::Orientation::DEGENERATE);
+    REQUIRE(GEO::PCK::orient_3d(t0.data(), t1.data(), t2.data(), t3.data()) == GEO::Sign::POSITIVE);
   }
 
   SUBCASE("Point in Tet") {
