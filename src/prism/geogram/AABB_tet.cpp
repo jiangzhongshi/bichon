@@ -76,19 +76,28 @@ std::vector<size_t> prism::geogram::AABB_tet::overlap_tetra(const std::array<Vec
     }
 
     bool found = false;
-    auto action = [&P,&result, &pp=geo_polyhedron_ptr_, &face_map=geo_cell_ind](GEO::index_t cell_id){
-        index_t c = pp->cells.corners_begin(cell_id);
-        Vec4i ind;
-        std::array<Vec3d, 4> g_tetra;
-        for (auto k=0; k<4;k++) {
-          ind[k] = pp->cell_corners.vertex(c+k);
-          auto pt = Geom::mesh_vertex(*pp, ind[k]);
-          g_tetra[k] = Vec3d(pt.x, pt.y, pt.z);
-        }
-        if (prism::predicates::tetrahedron_tetrahedron_overlap(g_tetra, P)) {
-          result.push_back(face_map[cell_id]);
-        }
-    };
+    auto action =
+        [&P, &result, &pp = geo_polyhedron_ptr_, &face_map = geo_cell_ind](GEO::index_t cell_id) {
+            index_t c = pp->cells.corners_begin(cell_id);
+            Vec4i ind;
+            std::array<Vec3d, 4> g_tetra;
+            Box g_box;
+            for (auto k = 0; k < 4; k++) {
+                ind[k] = pp->cell_corners.vertex(c + k);
+                auto pt = Geom::mesh_vertex(*pp, ind[k]);
+                g_tetra[k] = Vec3d(pt.x, pt.y, pt.z);
+            }
+            for (int i = 0; i < 3; i++) {
+                g_box.xyz_max[i] =
+                    std::max({g_tetra[0][i], g_tetra[1][i], g_tetra[2][i], g_tetra[3][i]});
+                g_box.xyz_min[i] =
+                    std::min({g_tetra[0][i], g_tetra[1][i], g_tetra[2][i], g_tetra[3][i]});
+            }
+
+            if (prism::predicates::tetrahedron_tetrahedron_overlap(g_tetra, P)) {
+                result.push_back(face_map[cell_id]);
+            }
+        };
     geo_tree_ptr_->compute_bbox_cell_bbox_intersections(in_box, action);
     return result;
 }

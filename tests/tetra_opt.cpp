@@ -93,7 +93,7 @@ TEST_CASE("feature-tet-coarsen")
 {
     std::string modelname = "../buildr/bunny.off";
     std::string filename = modelname + ".h5.tet.h5";
-    // std::string filename = "../buildr/bunny-tet-temp.h5";
+    
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
 
@@ -105,7 +105,7 @@ TEST_CASE("feature-tet-coarsen")
     option.collapse_quality_threshold = 8;
     //  spdlog::set_level(spdlog::level::trace);
     for (auto i = 0; i < 5; i++) {
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4/3.);
         prism::tet::serializer("../buildr/after_split.h5", pc.get(), tetmesh);
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         prism::tet::serializer("../buildr/after_smooth.h5", pc.get(), tetmesh);
@@ -145,7 +145,7 @@ TEST_CASE("feature-tet-right")
     };
     for (auto i = 0; i < 5; i++) {
         if (i >= 3) option.collapse_quality_threshold = 8;
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4/3.);
         saver(i, "sp");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "sm1");

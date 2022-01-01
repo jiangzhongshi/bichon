@@ -440,11 +440,12 @@ void serializer(std::string filename, const PrismCage* pc, const prism::tet::tet
     }
 }
 
-void edge_split_pass_with_sizer(
+int edge_split_pass_with_sizer(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer)
+    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    double scale)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
 
@@ -478,9 +479,9 @@ void edge_split_pass_with_sizer(
         if ((vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len2) continue;
         auto nb = set_inter(vert_tet_conn[v0], vert_tet_conn[v1]);
         if (nb.empty()) continue;
-        auto size_due = [&nb, &len2 = len2, &split_due]() {
+        auto size_due = [&nb, &len2 = len2, &split_due, scale]() {
             for (auto s : nb) {
-                if (split_due[s] < len2 * (16 / 9.)) return true;
+                if (split_due[s] < len2 * std::pow(scale, 2)) return true;
             }
             return false;
         }();
@@ -534,6 +535,7 @@ void edge_split_pass_with_sizer(
             prism::tet::logger().info("Split Going {}", timestamp);
         }
     }
+    return timestamp;
 }
 
 

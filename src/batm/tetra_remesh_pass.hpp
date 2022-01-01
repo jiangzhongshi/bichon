@@ -9,11 +9,12 @@
 namespace prism::tet {
 void serializer(std::string filename, const PrismCage* pc, const prism::tet::tetmesh_t& tetmesh);
 
-void edge_split_pass_with_sizer(
+int edge_split_pass_with_sizer(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer);
+    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    double scale);
 
 int collapse_pass(
     PrismCage* pc,

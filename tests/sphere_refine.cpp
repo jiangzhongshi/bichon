@@ -156,7 +156,10 @@ TEST_CASE("graded-sphere")
         auto stats = prism::tet::size_progress(sizer, tetmesh);
         spdlog::info(
             "Progress: Volume {}. Over {}. OverOver {}  LogError {}",
-            stats[2], stats[0]/stats[2], stats[1]/stats[2], stats[3]);
+            stats[2],
+            stats[0] / stats[2],
+            stats[1] / stats[2],
+            stats[3]);
         prism::tet::serializer(fmt::format("{}_{}_{}.h5", prefix, i, name), pc.get(), tetmesh);
     };
 
@@ -165,7 +168,7 @@ TEST_CASE("graded-sphere")
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
     };
     for (auto i = 0; i < 10; i++) {
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4 / 3.);
         saver(i, "split");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "smooth");
@@ -184,7 +187,7 @@ TEST_CASE("graded-sphere")
     return;
     option.collapse_quality_threshold = 8;
     for (auto i = 0; i < 5; i++) {
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4 / 3.);
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 1e-1);
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
@@ -194,30 +197,18 @@ TEST_CASE("graded-sphere")
     prism::tet::serializer("../buildr/sphere-right.h5", pc.get(), tetmesh);
 }
 
-TEST_CASE("loose-size")
+TEST_CASE("strict-size")
 {
-    std::string filename = "../buildr/left.h5";
+    std::string filename = "../buildr/coarse.h5-_7_swap.h5";
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 150;
+    option.collapse_quality_threshold = 8;
     prism::tet::logger().enable_backtrace(100);
 
-    auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
-    {
-        H5Easy::File file("../tests/data/cube_tetra_10.h5", H5Easy::File::ReadOnly);
-        auto bgV = H5Easy::load<RowMatd>(file, "V");
-        auto bgT = H5Easy::load<RowMati>(file, "T");
-        Eigen::VectorXd sizes(bgT.rows());
-        sizes.setConstant(1.);
-        // assign size
-        RowMatd BC;
-        igl::barycenter(bgV, bgT, BC);
-        for (auto i = 0; i < bgT.rows(); i++) {
-            if (BC(i, 0) > 0.9) sizes[i] = std::pow(5e-2, 2);
-        }
-        sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
-    }
+    auto sizer = log_sizer_constructor();
+    auto stats = prism::tet::size_progress(sizer, tetmesh);
+    return;
     auto improves_quality = [&, &tetmesh = tetmesh]() {
         edge_split_pass_for_dof(pc.get(), option, tetmesh);
         option.collapse_quality_threshold = -1;
@@ -228,14 +219,17 @@ TEST_CASE("loose-size")
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
     };
     for (auto i = 0; i < 6; i++) {
-        improves_quality();
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
-        improves_quality();
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
-        prism::tet::compact_tetmesh(tetmesh, pc.get());
-        prism::tet::serializer("../buildr/temp.h5", pc.get(), tetmesh);
+        auto spl = prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 1.);
+        spdlog::info("Splits {}", spl);
+        auto stats = prism::tet::size_progress(sizer, tetmesh);
+        spdlog::info(
+            "Progress: Volume {}. Over {}. OverOver {}  LogError {}",
+            stats[2],
+            stats[0] / stats[2],
+            stats[1] / stats[2],
+            stats[3]);
     }
-    prism::tet::serializer("../buildr/loose-coarse.h5", pc.get(), tetmesh);
+    // prism::tet::serializer("../buildr/loose-coarse.h5", pc.get(), tetmesh);
 }
 
 TEST_CASE("shell-only")
