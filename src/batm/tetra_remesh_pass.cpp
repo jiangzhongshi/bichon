@@ -266,7 +266,8 @@ int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer)
+    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    bool strict)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto edge_queue = construct_collapse_queue(vert_info, tet_info);
@@ -288,8 +289,8 @@ int collapse_pass(
         // TODO: this does not prevent double testing-rejection. Slightly more cost.
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
         if (previous[0] == v0 && previous[1] == v1) continue;
+        auto sizing2 = 1.0;
         {
-            auto sizing2 = 1.0;
             auto& nb1 = vert_tet_conn[v0];
             auto& nb2 = vert_tet_conn[v1];
             auto affected = set_inter(nb1, nb2);
@@ -307,8 +308,16 @@ int collapse_pass(
         if (pv0 != -1 && pc_skip[pv0]) { // shell freezed vertices are not subject to collapse
             continue;
         }
-        auto suc =
-            prism::tet::collapse_edge(pc, option, vert_info, tet_info, vert_tet_conn, v0, v1, 1.0);
+        auto post_check_size = (strict ? sizing2 : 1.0);
+        auto suc = prism::tet::collapse_edge(
+            pc,
+            option,
+            vert_info,
+            tet_info,
+            vert_tet_conn,
+            v0,
+            v1,
+            post_check_size);
         if (!suc) continue;
         cnt++;
         std::set<std::pair<int, int>> new_edges;

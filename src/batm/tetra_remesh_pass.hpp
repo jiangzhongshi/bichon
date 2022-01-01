@@ -20,7 +20,8 @@ int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer);
+    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    bool strict = false);
 
 int edgeswap_pass(
     PrismCage* pc,

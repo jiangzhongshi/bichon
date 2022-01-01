@@ -611,8 +611,8 @@ bool prism::predicates::segment_triangle_overlap(
   auto &[p, q] = seg;
   auto &[a, b, c] = tri;
   auto o3d = [](auto& a, auto& b, auto& c, auto&d){
-    // return GEO::PCK::orient_3d(a.data(), b.data(), c.data(), d.data());
-    return -int(igl::predicates::orient3d(a,b,c,d));
+    return GEO::PCK::orient_3d(a.data(), b.data(), c.data(), d.data());
+    // return -igl::predicates::orient3d(a,b,c,d);
   };
   auto abcp = o3d(a,b,c,p);
   auto abcq = o3d(a,b,c,q);
