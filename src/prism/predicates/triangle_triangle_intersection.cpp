@@ -603,13 +603,19 @@ bool point_in_tri(const Vec2d &p, const std::tuple<Vec2d &, Vec2d &, Vec2d &> &t
   return o2(a,b,p) >=0 && o2(b,c,p) >=0 && o2(c,a,p) >=0;
 }
 }  // namespace coplanar
+
+#include <igl/predicates/predicates.h>
 bool prism::predicates::segment_triangle_overlap(
     const std::array<Vec3d, 2> &seg, const std::array<Vec3d, 3> &tri) {
   using coplanar::to2d;
   auto &[p, q] = seg;
   auto &[a, b, c] = tri;
-  GEO::Sign abcp = GEO::PCK::orient_3d(a.data(), b.data(), c.data(), p.data());
-  GEO::Sign abcq = GEO::PCK::orient_3d(a.data(), b.data(), c.data(), q.data());
+  auto o3d = [](auto& a, auto& b, auto& c, auto&d){
+    // return GEO::PCK::orient_3d(a.data(), b.data(), c.data(), d.data());
+    return -int(igl::predicates::orient3d(a,b,c,d));
+  };
+  auto abcp = o3d(a,b,c,p);
+  auto abcq = o3d(a,b,c,q);
   if (abcp == 0) {  // project to 2d
     auto t = coplanar::get_axis(a, b, c);
     if (abcq == 0) {
@@ -630,11 +636,11 @@ bool prism::predicates::segment_triangle_overlap(
   }
   if (abcp == abcq) 
     return false;  // both nonzero, on the same side
-  GEO::Sign s1 = GEO::PCK::orient_3d(p.data(), q.data(), a.data(), b.data());
-  GEO::Sign s2 = GEO::PCK::orient_3d(p.data(), q.data(), b.data(), c.data());
+  auto s1 = o3d(p,q,a,b);//GEO::PCK::orient_3d(p.data(), q.data(), a.data(), b.data());
+  auto s2 = o3d(p,q,b,c);//GEO::PCK::orient_3d(p.data(), q.data(), b.data(), c.data());
   if (s1!=0 && s2!= 0 && s1 != s2) 
     return false;
-  GEO::Sign s3 = GEO::PCK::orient_3d(p.data(), q.data(), c.data(), a.data());
+  auto s3 = o3d(p,q,c,a);
   if (s1 > 0 || s2 > 0 || s3 > 0) {
     if (s1 < 0 || s2 < 0 || s3 < 0) return false; // if there is a + - pair, then not intersecting
   }

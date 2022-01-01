@@ -15,6 +15,7 @@
 
 #include <geogram/basic/geometry.h>
 #include <igl/barycenter.h>
+#include <igl/predicates/predicates.h>
 #include <igl/read_triangle_mesh.h>
 #include <igl/volume.h>
 #include <spdlog/fmt/bundled/ranges.h>
@@ -199,6 +200,7 @@ TEST_CASE("graded-sphere")
 
 TEST_CASE("strict-size")
 {
+    igl::predicates::exactinit();
     std::string filename = "../buildr/coarse.h5-_7_swap.h5";
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
