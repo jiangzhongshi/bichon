@@ -16,6 +16,7 @@
 #include <geogram/basic/geometry.h>
 #include <igl/barycenter.h>
 #include <igl/read_triangle_mesh.h>
+#include <igl/volume.h>
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
@@ -103,7 +104,7 @@ auto log_sizer_constructor = []() {
         auto bgV = H5Easy::load<RowMatd>(file, "V");
         auto bgT = H5Easy::load<RowMati>(file, "T");
         Eigen::VectorXd sizes = H5Easy::load<Eigen::VectorXd>(file, "size");
-        sizes = sizes.unaryExpr ([] (double d) {return std::pow (d, 2);});
+        sizes = sizes.unaryExpr([](double d) { return std::pow(d, 2); });
         sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
     }
     return std::move(sizer);
@@ -130,7 +131,6 @@ auto barycentric_sizer_constructor = [](const auto& func) {
 };
 
 
-
 TEST_CASE("graded-sphere")
 {
     std::string filename = "../buildr/coarse.h5";
@@ -149,17 +149,14 @@ TEST_CASE("graded-sphere")
     prism::tet::logger().enable_backtrace(100);
 
     auto sizer = log_sizer_constructor();
-    // auto sizer = barycentric_sizer_constructor([](const auto& bc) {
-    //     auto x = bc[0];
-    //     auto len = 1.;
-    //     if (x < 0.5) len = 1e-1;
-    //     if (x < 0.2) len = 5e-2;
-    //     if (x < 0.1) len = 1e-2;
-    //     if (x < 0.05) len = 5e-3;
-    //     return std::pow(len, 2);
-    // });
+
+
     std::string prefix = filename + "-";
-    auto saver = [&tetmesh = tetmesh, &pc, prefix](int i, std::string name) {
+    auto saver = [&tetmesh = tetmesh, &pc, prefix, &sizer](int i, std::string name) {
+        auto stats = prism::tet::size_progress(sizer, tetmesh);
+        spdlog::info(
+            "Progress: Volume {}. Over {}. OverOver {}  LogError {}",
+            stats[2], stats[0]/stats[2], stats[1]/stats[2], stats[3]);
         prism::tet::serializer(fmt::format("{}_{}_{}.h5", prefix, i, name), pc.get(), tetmesh);
     };
 
@@ -184,7 +181,6 @@ TEST_CASE("graded-sphere")
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         saver(i, "collapse");
     }
-    prism::tet::serializer("../buildr/sphere-left.h5", pc.get(), tetmesh);
     return;
     option.collapse_quality_threshold = 8;
     for (auto i = 0; i < 5; i++) {

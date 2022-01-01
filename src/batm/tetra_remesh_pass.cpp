@@ -6,20 +6,62 @@
 #include "tetra_logger.hpp"
 #include "tetra_utils.hpp"
 
+#include <igl/volume.h>
 #include <highfive/H5Easy.hpp>
+
 #include <queue>
 
 namespace prism::tet {
 
-auto size_constraint = [](const auto& vert_info, const auto& tet, auto& sizer) -> double {
+double size_constraint(
+    const prism::tet::vert_info_t& vert_info,
+    const Vec4i& tet,
+    const std::unique_ptr<prism::tet::SizeController>& sizer)
+{
     // return 0.1;
     std::array<Vec3d, 4> stack_pos;
     for (auto j = 0; j < 4; j++) {
+        assert(tet[j] != -1);
         stack_pos[j] = vert_info[tet[j]].pos;
     }
     auto size_con = sizer->find_size_bound(stack_pos);
     return size_con;
-};
+}
+
+
+std::vector<double> size_progress(
+    std::unique_ptr<prism::tet::SizeController>& sizer,
+    const prism::tet::tetmesh_t& tetmesh)
+{
+    auto& [verts, tets, vt_conn] = tetmesh;
+    auto stats = std::vector<double>();
+    auto violating_vol = 0.;
+    auto total_vol = 0.;
+    auto violating_vol_4_3 = 0.; // with 4/3 sizer
+    auto integral = 0.;
+    for (auto t : tets) {
+        if (t.is_removed) continue;
+        auto size_con = size_constraint(verts, t.conn, sizer);
+        auto diam2 = prism::tet::diameter2(
+            verts[t.conn[0]].pos,
+            verts[t.conn[1]].pos,
+            verts[t.conn[2]].pos,
+            verts[t.conn[3]].pos);
+        auto vol = igl::volume_single(
+            verts[t.conn[0]].pos,
+            verts[t.conn[1]].pos,
+            verts[t.conn[2]].pos,
+            verts[t.conn[3]].pos);
+        total_vol += vol;
+        if (diam2 > size_con) { // violate
+            violating_vol += vol;
+            integral += vol*log(diam2 / size_con);
+        }
+        if (diam2 > size_con * 4/3) violating_vol_4_3 += vol;
+    }
+    stats = {violating_vol, violating_vol_4_3, total_vol, integral/total_vol};
+    return stats;//std::pair(violating_vol, total_vol);
+}
 
 
 std::priority_queue<std::tuple<double, int, int>> construct_collapse_queue(

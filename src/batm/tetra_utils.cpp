@@ -11,6 +11,7 @@
 #include "tetra_logger.hpp"
 
 #include <igl/boundary_facets.h>
+#include <igl/doublearea.h>
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
@@ -544,7 +545,8 @@ auto get_newton_position = [](const auto& vert_attrs,
     return newton_position_from_stack(assembles);
 };
 
-auto get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
+std::optional<Vec3d>
+get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0)
 {
     auto query = [&ref = pc.ref](const Vec3d& s, const Vec3d& t, const std::set<int>& total_trackee)
         -> std::optional<Vec3d> {
@@ -566,6 +568,32 @@ auto get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pri
     // assert(mid_intersect && "Snap project should succeed.");
     return mid_intersect;
 }
+
+auto snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
+{
+    std::vector<std::vector<int>> vf(pc->mid.size());
+    Eigen::VectorXd all_dist2 = Eigen::VectorXd::Constant(pc->mid.size(), -1);
+    Eigen::VectorXd all_weight = Eigen::VectorXd::Zero(pc->mid.size());
+    Eigen::VectorXd areas = Eigen::VectorXd::Zero(pc->F.size());
+    for (auto i = 0; i < pc->F.size(); i++) {
+        auto& f = pc->F[i];
+        if (f[0] == -1) continue;
+        for (auto vi : f) vf[vi].push_back(i);
+        areas[i] = igl::doublearea_single(pc->mid[f[0]], pc->mid[f[1]], pc->mid[f[2]]) / 2;
+    }
+    for (auto i = 0; i < pc->mid.size(); i++) {
+        if (vf[i].empty()) continue;
+
+        auto pos = get_snap_position(*pc, vf[i], i);
+        if (!pos) {
+            spdlog::warn("Shell Projection invalid");
+            assert(false);
+        }
+         all_dist2[i] = (pos.value() - pc->mid[i]).squaredNorm();
+        for (auto f : vf[i]) all_weight[i] += areas[f] / 3;
+    }
+    return std::tuple(all_dist2, all_weight);
+};
 
 bool smooth_vertex(
     PrismCage* pc,
@@ -1316,7 +1344,7 @@ bool flip_edge_sf(
     const auto vx = vert_attrs.size();
 
     auto bnd_faces = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
-    if (bnd_faces.empty()) { 
+    if (bnd_faces.empty()) {
         prism::tet::logger().trace("bnd_faces.empty Flip new op: {} {}", v0, v1);
         return false; // skip
     }
