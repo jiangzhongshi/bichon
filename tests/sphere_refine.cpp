@@ -96,6 +96,19 @@ TEST_CASE("sphere-coarsen-aggresive")
 }
 
 
+auto log_sizer_constructor = []() {
+    auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
+    {
+        H5Easy::File file("../tests/data/cube_log_size.h5", H5Easy::File::ReadOnly);
+        auto bgV = H5Easy::load<RowMatd>(file, "V");
+        auto bgT = H5Easy::load<RowMati>(file, "T");
+        Eigen::VectorXd sizes = H5Easy::load<Eigen::VectorXd>(file, "size");
+        sizes = sizes.unaryExpr ([] (double d) {return std::pow (d, 2);});
+        sizer.reset(new prism::tet::SizeController(bgV, bgT, sizes));
+    }
+    return std::move(sizer);
+};
+
 auto barycentric_sizer_constructor = [](const auto& func) {
     auto sizer = std::unique_ptr<prism::tet::SizeController>(nullptr);
     {
@@ -116,6 +129,8 @@ auto barycentric_sizer_constructor = [](const auto& func) {
     return std::move(sizer);
 };
 
+
+
 TEST_CASE("graded-sphere")
 {
     std::string filename = "../buildr/coarse.h5";
@@ -133,21 +148,20 @@ TEST_CASE("graded-sphere")
     option.distortion_bound = 1e-3;
     prism::tet::logger().enable_backtrace(100);
 
-    auto sizer = barycentric_sizer_constructor([](const auto& bc) {
-        auto x = bc[0];
-        auto len = 1.;
-        if (x < 0.5) len = 1e-1;
-        if (x < 0.2) len = 5e-2;
-        if (x < 0.1) len = 1e-2;
-        if (x < 0.05) len = 5e-3;
-        return std::pow(len, 2);
-    });
+    auto sizer = log_sizer_constructor();
+    // auto sizer = barycentric_sizer_constructor([](const auto& bc) {
+    //     auto x = bc[0];
+    //     auto len = 1.;
+    //     if (x < 0.5) len = 1e-1;
+    //     if (x < 0.2) len = 5e-2;
+    //     if (x < 0.1) len = 1e-2;
+    //     if (x < 0.05) len = 5e-3;
+    //     return std::pow(len, 2);
+    // });
     std::string prefix = filename + "-";
     auto saver = [&tetmesh = tetmesh, &pc, prefix](int i, std::string name) {
         prism::tet::serializer(fmt::format("{}_{}_{}.h5", prefix, i, name), pc.get(), tetmesh);
     };
-
-    auto sizer2 = barycentric_sizer_constructor([](const auto& bc) { return 1.0; });
 
     auto swapper = [&]() {
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
