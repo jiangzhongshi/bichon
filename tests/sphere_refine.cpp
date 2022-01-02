@@ -232,6 +232,9 @@ TEST_CASE("strict-size")
             stats[3]);
     }
     prism::tet::serializer("../buildr/split-satisfy.h5", pc.get(), tetmesh);
+    for (auto i=0; i<3; i++) {
+    prism::tet::edgeswap_pass(pc.get(), option, tetmesh, sizer.get());
+    prism::tet::faceswap_pass(pc.get(), option, tetmesh, sizer.get());
     prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
     auto stats = prism::tet::size_progress(sizer.get(), tetmesh);
     spdlog::info(
@@ -240,7 +243,8 @@ TEST_CASE("strict-size")
         stats[0] / stats[2],
         stats[1] / stats[2],
         stats[3]);
-    // prism::tet::serializer("../buildr/loose-coarse.h5", pc.get(), tetmesh);
+    }
+    prism::tet::serializer("../buildr/strict-size.h5", pc.get(), tetmesh);
 }
 
 TEST_CASE("shell-only")
@@ -261,17 +265,4 @@ TEST_CASE("shell-only")
     for (auto repeat = 0; repeat < 5; repeat++) prism::local::localsmooth_pass(*pc, option);
     prism::local::wildcollapse_pass(*pc, option);
     pc->serialize("../buildr/after_collapse.h5");
-}
-
-TEST_CASE("debug-swap")
-{
-    std::string filename = "/Users/zhongshi/Workspace/bichon/buildr/sphere-_4_collapse.h5";
-    auto pc = std::make_shared<PrismCage>(filename);
-    auto tetmesh = prism::tet::reload(filename, pc.get());
-    prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 150;
-    prism::tet::logger().enable_backtrace(100);
-    prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
-    prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
-    prism::tet::serializer("../buildr/after_swap.h5", pc.get(), tetmesh);
 }

@@ -324,24 +324,10 @@ int collapse_pass(
         // TODO: this does not prevent double testing-rejection. Slightly more cost.
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
         if (previous[0] == v0 && previous[1] == v1) continue;
-        {
-            auto stats = prism::tet::size_progress(sizer, tetmesh);
-            spdlog::info(
-                "(Col) Progress: Volume {}. Over {}. OverOver {}  LogError {}",
-                stats[2],
-                stats[0] / stats[2],
-                stats[1] / stats[2],
-                stats[3]);
-            if (stats[0] > 0) {
-                prism::tet::logger().dump_backtrace();
-                exit(1);
-            }
-        }
+
         auto sizing2 = 1.0;
         {
-            auto& nb1 = vert_tet_conn[v0];
-            auto& nb2 = vert_tet_conn[v1];
-            auto affected = set_inter(nb1, nb2);
+            auto& affected = vert_tet_conn[v0];
             if (affected.empty()) continue;
             for (auto t : affected) {
                 auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
