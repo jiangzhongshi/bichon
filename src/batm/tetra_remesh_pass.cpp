@@ -9,6 +9,7 @@
 #include <igl/volume.h>
 #include <highfive/H5Easy.hpp>
 
+#include <memory>
 #include <queue>
 
 namespace prism::tet {
@@ -16,7 +17,7 @@ namespace prism::tet {
 double size_constraint(
     const prism::tet::vert_info_t& vert_info,
     const Vec4i& tet,
-    const std::unique_ptr<prism::tet::SizeController>& sizer)
+    const prism::tet::SizeController* sizer)
 {
     // return 0.1;
     std::array<Vec3d, 4> stack_pos;
@@ -30,7 +31,7 @@ double size_constraint(
 
 
 std::vector<double> size_progress(
-    std::unique_ptr<prism::tet::SizeController>& sizer,
+    const prism::tet::SizeController* sizer,
     const prism::tet::tetmesh_t& tetmesh)
 {
     auto& [verts, tets, vt_conn] = tetmesh;
@@ -139,7 +140,7 @@ int faceswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    double sizing)
+    const prism::tet::SizeController* sizer)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto face_queue = construct_face_queue(vert_info, tet_info);
@@ -148,6 +149,25 @@ int faceswap_pass(
     while (!face_queue.empty()) {
         auto [len, v0, v1, v2] = face_queue.top();
         face_queue.pop();
+        auto sizing2 = 1.0;
+
+        if (sizer != nullptr) {
+            auto& nb0 = vert_tet_conn[v0];
+            auto& nb1 = vert_tet_conn[v1];
+            auto& nb2 = vert_tet_conn[v2];
+            auto inter0_1 = set_inter(nb0, nb1);
+            auto affected = set_inter(inter0_1, nb2);
+
+
+            if (affected.size() != 2) { // has to be on boundary, or an invalid face input.
+                continue;
+            }
+            for (auto t : affected) {
+                auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
+                sizing2 = std::min(t_size, sizing2);
+            }
+        }
+
         auto flag = prism::tet::swap_face(
             pc,
             option,
@@ -157,7 +177,7 @@ int faceswap_pass(
             v0,
             v1,
             v2,
-            sizing);
+            sizing2);
         if (flag) cnt++;
     }
     prism::tet::logger().info("After Swap Size {} {}", vert_info.size(), tet_info.size());
@@ -168,7 +188,7 @@ int edgeswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    double sizing)
+    const prism::tet::SizeController* sizer)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
     auto edge_queue = construct_edge_queue(vert_info, tet_info);
@@ -179,6 +199,21 @@ int edgeswap_pass(
         edge_queue.pop();
         auto bnd_faces = edge_adjacent_boundary_face(tet_info, vert_tet_conn, v0, v1);
         auto flag = false;
+        auto sizing2 = 1.0;
+
+        if (sizer != nullptr) {
+            auto& nb0 = vert_tet_conn[v0];
+            auto& nb1 = vert_tet_conn[v1];
+            auto affected = set_inter(nb0, nb1);
+            if (affected.size() != 3 && bnd_faces.empty()) { // not on boundary. AND
+                continue;
+            }
+            for (auto t : affected) {
+                auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
+                sizing2 = std::min(t_size, sizing2);
+            }
+        }
+
         if (bnd_faces.empty())
             flag = prism::tet::swap_edge(
                 pc,
@@ -188,7 +223,7 @@ int edgeswap_pass(
                 vert_tet_conn,
                 v0,
                 v1,
-                sizing);
+                sizing2);
         else {
             assert(bnd_faces.size() == 2);
             flag = prism::tet::flip_edge_sf(
@@ -199,7 +234,7 @@ int edgeswap_pass(
                 vert_tet_conn,
                 v0,
                 v1,
-                sizing);
+                sizing2);
         }
 
         if (flag) cnt++;
@@ -266,7 +301,7 @@ int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    const prism::tet::SizeController* sizer,
     bool strict)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
@@ -289,6 +324,19 @@ int collapse_pass(
         // TODO: this does not prevent double testing-rejection. Slightly more cost.
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
         if (previous[0] == v0 && previous[1] == v1) continue;
+        {
+            auto stats = prism::tet::size_progress(sizer, tetmesh);
+            spdlog::info(
+                "(Col) Progress: Volume {}. Over {}. OverOver {}  LogError {}",
+                stats[2],
+                stats[0] / stats[2],
+                stats[1] / stats[2],
+                stats[3]);
+            if (stats[0] > 0) {
+                prism::tet::logger().dump_backtrace();
+                exit(1);
+            }
+        }
         auto sizing2 = 1.0;
         {
             auto& nb1 = vert_tet_conn[v0];
@@ -453,7 +501,7 @@ int edge_split_pass_with_sizer(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer,
+    const prism::tet::SizeController* sizer,
     double scale)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;

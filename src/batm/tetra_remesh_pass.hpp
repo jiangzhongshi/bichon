@@ -13,27 +13,27 @@ int edge_split_pass_with_sizer(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer,
+     const prism::tet::SizeController* sizer,
     double scale);
 
 int collapse_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    const std::unique_ptr<prism::tet::SizeController>& sizer,
+     const prism::tet::SizeController* sizer,
     bool strict = false);
 
 int edgeswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    double sizing);
+     const prism::tet::SizeController* sizer);
 
 int faceswap_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
-    double sizing);
+     const prism::tet::SizeController* sizer);
 
 std::priority_queue<std::tuple<double, int, int, int>> construct_face_queue(
     const prism::tet::vert_info_t& vert_info,
@@ -59,6 +59,6 @@ int edge_split_pass_for_dof(
     prism::tet::tetmesh_t& tetmesh);
 
 std::vector<double> size_progress(
-    std::unique_ptr<prism::tet::SizeController>& sizer,
+    const prism::tet::SizeController* sizer,
     const prism::tet::tetmesh_t& tetmesh);
 } // namespace prism::tet

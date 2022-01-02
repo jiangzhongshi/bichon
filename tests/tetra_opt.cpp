@@ -105,18 +105,18 @@ TEST_CASE("feature-tet-coarsen")
     option.collapse_quality_threshold = 8;
     //  spdlog::set_level(spdlog::level::trace);
     for (auto i = 0; i < 5; i++) {
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4/3.);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4/3.);
         prism::tet::serializer("../buildr/after_split.h5", pc.get(), tetmesh);
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         prism::tet::serializer("../buildr/after_smooth.h5", pc.get(), tetmesh);
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
         prism::tet::serializer("../buildr/after_swap.h5", pc.get(), tetmesh);
         prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
         prism::tet::serializer("../buildr/after_dof.h5", pc.get(), tetmesh);
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         prism::tet::serializer("../buildr/after_smooth2.h5", pc.get(), tetmesh);
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         prism::tet::serializer("../buildr/after_collapse", pc.get(), tetmesh);
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
@@ -145,18 +145,18 @@ TEST_CASE("feature-tet-right")
     };
     for (auto i = 0; i < 5; i++) {
         if (i >= 3) option.collapse_quality_threshold = 8;
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer, 4/3.);
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4/3.);
         saver(i, "sp");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "sm1");
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, 1.);
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, 1.);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
         saver(i, "sw");
         prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
         saver(i, "spd");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "sm2");
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer);
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         saver(i, "col");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
