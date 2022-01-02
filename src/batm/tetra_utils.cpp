@@ -569,17 +569,27 @@ get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, in
     return mid_intersect;
 }
 
-auto snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
+std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
 {
     std::vector<std::vector<int>> vf(pc->mid.size());
     Eigen::VectorXd all_dist2 = Eigen::VectorXd::Constant(pc->mid.size(), -1);
     Eigen::VectorXd all_weight = Eigen::VectorXd::Zero(pc->mid.size());
     Eigen::VectorXd areas = Eigen::VectorXd::Zero(pc->F.size());
+    auto tri_area = [](auto& a, auto& b, auto&c)->double {
+        RowMatd V(3,3);
+        V << a,b,c;
+        RowMati F(1,3);
+        F<<0,1,2;
+        Eigen::VectorXd dblarea;
+        igl::doublearea(V,F,dblarea);
+        return dblarea[0]/2;
+    };
+
     for (auto i = 0; i < pc->F.size(); i++) {
         auto& f = pc->F[i];
         if (f[0] == -1) continue;
         for (auto vi : f) vf[vi].push_back(i);
-        areas[i] = igl::doublearea_single(pc->mid[f[0]], pc->mid[f[1]], pc->mid[f[2]]) / 2;
+        areas[i] = tri_area(pc->mid[f[0]], pc->mid[f[1]], pc->mid[f[2]]);
     }
     for (auto i = 0; i < pc->mid.size(); i++) {
         if (vf[i].empty()) continue;

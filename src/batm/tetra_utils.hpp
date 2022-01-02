@@ -148,6 +148,8 @@ void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc = nullptr);
 std::optional<Vec3d>
 get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0);
 
+std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc);
+
 bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc);
 } // namespace prism::tet
 

@@ -168,6 +168,12 @@ TEST_CASE("graded-sphere")
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
     };
+    auto print_snap_progress = [&]() {
+        auto [dist2, weight] = prism::tet::snap_progress(tetmesh, pc.get());
+        auto integral = sqrt(dist2.dot(weight) / weight.sum());
+        spdlog::info("Snap Progress::: INT {}, MAX {}, ", integral, sqrt(dist2.maxCoeff()));
+    };
+    print_snap_progress();
     for (auto i = 0; i < 10; i++) {
         prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4 / 3.);
         saver(i, "split");
@@ -175,10 +181,12 @@ TEST_CASE("graded-sphere")
         saver(i, "smooth");
         swapper();
         saver(i, "swap");
+        print_snap_progress();
         prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
         saver(i, "dof");
         prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
         saver(i, "smooth2");
+        print_snap_progress();
         prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
         swapper();
         saver(i, "swap2");
