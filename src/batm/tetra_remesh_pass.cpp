@@ -19,6 +19,7 @@ double size_constraint(
     const Vec4i& tet,
     const prism::tet::SizeController* sizer)
 {
+    if (sizer == nullptr) return 1.0;
     // return 0.1;
     std::array<Vec3d, 4> stack_pos;
     for (auto j = 0; j < 4; j++) {
