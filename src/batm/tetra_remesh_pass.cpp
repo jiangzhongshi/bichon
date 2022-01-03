@@ -16,18 +16,32 @@ namespace prism::tet {
 
 double size_constraint(
     const prism::tet::vert_info_t& vert_info,
-    const Vec4i& tet,
+    const prism::tet::TetAttr& tet,
     const prism::tet::SizeController* sizer)
 {
     if (sizer == nullptr) return 1.0;
-    // return 0.1;
-    std::array<Vec3d, 4> stack_pos;
-    for (auto j = 0; j < 4; j++) {
-        assert(tet[j] != -1);
-        stack_pos[j] = vert_info[tet[j]].pos;
+
+    if (!sizer->surface_only) {
+        std::array<Vec3d, 4> stack_pos;
+        for (auto j = 0; j < 4; j++) {
+            assert(tet.conn[j] != -1);
+            stack_pos[j] = vert_info[tet.conn[j]].pos;
+        }
+        auto size_con = sizer->find_size_bound(stack_pos);
+        return size_con;
+    } else {
+        auto min_con = 1.;
+        for (auto j = 0; j < 4; j++) {
+            if (tet.prism_id[j] == -1) continue; // surface
+            std::array<Vec3d, 3> stack_pos;
+            for (auto k = 0; k < 3; k++) {
+                stack_pos[k] = vert_info[tet.conn[(j + 1 + k) % 4]].pos;
+            }
+            auto size_con = sizer->find_size_bound(stack_pos);
+            min_con = std::min(size_con, min_con);
+        }
+        return min_con;
     }
-    auto size_con = sizer->find_size_bound(stack_pos);
-    return size_con;
 }
 
 double minimum_sizing_in_neighbor(
@@ -69,7 +83,7 @@ std::vector<double> size_progress(
     auto integral = 0.;
     for (auto t : tets) {
         if (t.is_removed) continue;
-        auto size_con = size_constraint(verts, t.conn, sizer);
+        auto size_con = size_constraint(verts, t, sizer);
         auto diam2 = prism::tet::diameter2(
             verts[t.conn[0]].pos,
             verts[t.conn[1]].pos,
@@ -174,7 +188,7 @@ int faceswap_pass(
     std::vector<double> size_cons(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
-        size_cons[i] = size_constraint(vert_info, tet_info[i].conn, sizer);
+        size_cons[i] = size_constraint(vert_info, tet_info[i], sizer);
     }
     auto cnt = 0;
     prism::tet::logger().info("Face Swap: mesh size {} {}", vert_info.size(), tet_info.size());
@@ -207,7 +221,7 @@ int faceswap_pass(
         if (flag) {
             size_cons.resize(tet_info.size(), 1.);
             for (auto t = old_tets; t < tet_info.size(); t++) {
-                size_cons[t] = size_constraint(vert_info, tet_info[t].conn, sizer);
+                size_cons[t] = size_constraint(vert_info, tet_info[t], sizer);
             }
             cnt++;
         }
@@ -229,7 +243,7 @@ int edgeswap_pass(
     std::vector<double> size_cons(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
-        size_cons[i] = size_constraint(vert_info, tet_info[i].conn, sizer);
+        size_cons[i] = size_constraint(vert_info, tet_info[i], sizer);
     }
     while (!edge_queue.empty()) {
         auto [len, v0, v1] = edge_queue.top();
@@ -271,7 +285,7 @@ int edgeswap_pass(
         if (flag) {
             size_cons.resize(tet_info.size(), 1.);
             for (auto t = old_tets; t < tet_info.size(); t++) {
-                size_cons[t] = size_constraint(vert_info, tet_info[t].conn, sizer);
+                size_cons[t] = size_constraint(vert_info, tet_info[t], sizer);
             }
             cnt++;
         }
@@ -347,7 +361,7 @@ int collapse_pass(
     std::vector<double> size_cons(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
-        size_cons[i] = size_constraint(vert_info, tet_info[i].conn, sizer);
+        size_cons[i] = size_constraint(vert_info, tet_info[i], sizer);
     }
     assert(size_cons.size() == tet_info.size());
 
@@ -403,7 +417,7 @@ int collapse_pass(
                 }
             }
             if (t + 1 >= size_cons.size()) size_cons.resize(t + 1, 1.0);
-            size_cons[t] = size_constraint(vert_info, tet_info[t].conn, sizer);
+            size_cons[t] = size_constraint(vert_info, tet_info[t], sizer);
         }
         // push to queue
         for (auto [vi, vj] : new_edges) {
@@ -431,7 +445,7 @@ int vertexsmooth_pass(
     std::vector<double> size_cons(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
-        size_cons[i] = size_constraint(vert_info, tet_info[i].conn, sizer);
+        size_cons[i] = size_constraint(vert_info, tet_info[i], sizer);
     }
     std::vector<bool> snap_flag(pc->mid.size(), false);
     auto total_cnt = 0;
@@ -468,7 +482,7 @@ int vertexsmooth_pass(
         }
         if (modified)
             for (auto t : vert_tet_conn[v0]) {
-                size_cons[t] = size_constraint(vert_info, tet_info[t].conn, sizer);
+                size_cons[t] = size_constraint(vert_info, tet_info[t], sizer);
             }
     }
     auto cnt_snap = 0;
@@ -549,7 +563,7 @@ int edge_split_pass_with_sizer(
     std::vector<double> split_due(tet_info.size(), 1.);
     for (auto i = 0; i < tet_info.size(); i++) {
         if (tet_info[i].is_removed) continue;
-        split_due[i] = size_constraint(vert_info, tet_info[i].conn, sizer);
+        split_due[i] = size_constraint(vert_info, tet_info[i], sizer);
     }
     assert(split_due.size() == tet_info.size());
 
@@ -612,7 +626,7 @@ int edge_split_pass_with_sizer(
         auto edge_set = std::set<std::tuple<int, int>>();
         for (auto i : new_tid) {
             auto& tet = tet_info[i];
-            auto size_con = (size_constraint(vert_info, tet_info[i].conn, sizer));
+            auto size_con = (size_constraint(vert_info, tet_info[i], sizer));
             split_due[i] = size_con;
         }
         for (auto i : new_tid) {

@@ -150,6 +150,7 @@ TEST_CASE("graded-sphere")
     prism::tet::logger().enable_backtrace(100);
 
     auto sizer = log_sizer_constructor();
+    sizer->surface_only = true;
 
     std::string prefix = filename + "-";
     auto saver = [&tetmesh = tetmesh, &pc, prefix, &sizer](int i, std::string name) {
@@ -298,4 +299,8 @@ TEST_CASE("shell-only")
     for (auto repeat = 0; repeat < 5; repeat++) prism::local::localsmooth_pass(*pc, option);
     prism::local::wildcollapse_pass(*pc, option);
     pc->serialize("../buildr/after_collapse.h5");
+}
+
+TEST_CASE("surface-based-refinemnet") {
+     // only check size if on surface.
 }

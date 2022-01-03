@@ -32,6 +32,7 @@ public:
      * @return std::vector<size_t>
      */
     std::vector<size_t> overlap_tetra(const std::array<Vec3d, 4>&) const;
+    std::vector<size_t> overlap_tri(const std::array<Vec3d, 3>&) const;
 
 private:
     // used for internal reordering (Morton coding used by geogram),

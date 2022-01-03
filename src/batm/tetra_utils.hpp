@@ -31,8 +31,10 @@ struct SizeController
 {
     std::shared_ptr<prism::geogram::AABB_tet> bg_tree;
     Eigen::VectorXd sizes;
+    bool surface_only = false;
     SizeController(const RowMatd& tetV, const RowMati& tetT, const Eigen::VectorXd& tetSize);
     double find_size_bound(const std::array<Vec3d, 4>&) const;
+    double find_size_bound(const std::array<Vec3d, 3>&) const;
 };
 
 struct TetAttr
@@ -148,7 +150,9 @@ void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc = nullptr);
 std::optional<Vec3d>
 get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, int v0);
 
-std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc);
+std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(
+    const prism::tet::tetmesh_t& tetmesh,
+    PrismCage* pc);
 
 bool common_tet_checkers(
     double quality_threshold,

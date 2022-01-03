@@ -20,17 +20,28 @@ SizeController::SizeController(
     assert(tetT.rows() == sizes.size());
 }
 
-double SizeController::find_size_bound(const std::array<Vec3d, 4>& P) const
+auto process_result(const Eigen::VectorXd& sizes, const std::vector<size_t>& result)
 {
-    auto result = bg_tree->overlap_tetra(P);
     auto min_size = 1.0;
     if (result.empty()) {
-        spdlog::critical("Not found, check {} {} {} {}", P[0], P[1], P[2], P[3]);
+        spdlog::critical("Not found, check");
         return min_size;
     }
 
     for (auto i : result) min_size = std::min(sizes[i], min_size);
     return min_size;
+};
+
+double SizeController::find_size_bound(const std::array<Vec3d, 4>& P) const
+{
+    auto result = bg_tree->overlap_tetra(P);
+    return process_result(sizes, result);
+}
+
+double SizeController::find_size_bound(const std::array<Vec3d, 3>& P) const
+{
+    auto result = bg_tree->overlap_tri(P);
+    return process_result(sizes, result);
 }
 
 } // namespace prism::tet
