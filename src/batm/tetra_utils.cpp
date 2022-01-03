@@ -569,20 +569,22 @@ get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, in
     return mid_intersect;
 }
 
-std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
+std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(
+    const prism::tet::tetmesh_t& tetmesh,
+    PrismCage* pc)
 {
     std::vector<std::vector<int>> vf(pc->mid.size());
     Eigen::VectorXd all_dist2 = Eigen::VectorXd::Constant(pc->mid.size(), -1);
     Eigen::VectorXd all_weight = Eigen::VectorXd::Zero(pc->mid.size());
     Eigen::VectorXd areas = Eigen::VectorXd::Zero(pc->F.size());
-    auto tri_area = [](auto& a, auto& b, auto&c)->double {
-        RowMatd V(3,3);
-        V << a,b,c;
-        RowMati F(1,3);
-        F<<0,1,2;
+    auto tri_area = [](auto& a, auto& b, auto& c) -> double {
+        RowMatd V(3, 3);
+        V << a, b, c;
+        RowMati F(1, 3);
+        F << 0, 1, 2;
         Eigen::VectorXd dblarea;
-        igl::doublearea(V,F,dblarea);
-        return dblarea[0]/2;
+        igl::doublearea(V, F, dblarea);
+        return dblarea[0] / 2;
     };
 
     for (auto i = 0; i < pc->F.size(); i++) {
@@ -599,7 +601,7 @@ std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tet
             spdlog::warn("Shell Projection invalid");
             assert(false);
         }
-         all_dist2[i] = (pos.value() - pc->mid[i]).squaredNorm();
+        all_dist2[i] = (pos.value() - pc->mid[i]).squaredNorm();
         for (auto f : vf[i]) all_weight[i] += areas[f] / 3;
     }
     return std::tuple(all_dist2, all_weight);
@@ -707,10 +709,11 @@ bool smooth_vertex(
         }
     }
     if (std::get<1>(new_directions).squaredNorm() + std::get<0>(new_directions).squaredNorm() +
-            std::get<2>(new_directions).squaredNorm() ==
-        0) {
+            std::get<2>(new_directions).squaredNorm() <
+        1e-12) {
         prism::tet::logger().debug("Not Moving, {}", smooth_type);
-        return false;
+        rollback();
+        return true;
     }
 
     // test a direction
@@ -718,21 +721,11 @@ bool smooth_vertex(
         [&rollback, &tet_nb, pv0, v0, &tet_attrs, &size_control, &vert_attrs, &pc, &option](
             const auto& new_directions) {
             vert_attrs[v0].pos = vert_attrs[v0].pos + std::get<1>(new_directions);
-            if (pv0 == -1) {
-                // Consider size only when internal. TODO: figure out priority of snapping vs
-                // size.
-                auto old_tets = std::vector<Vec4i>(tet_nb.size());
-                for (auto i = 0; i < tet_nb.size(); i++) old_tets[i] = tet_attrs[tet_nb[i]].conn;
-                auto after_size = max_tetra_sizes(vert_attrs, old_tets);
-                if (after_size > size_control) return rollback();
-            }
-            for (auto ti : tet_nb) {
-                auto& t = tet_attrs[ti].conn;
-                if (!tetra_validity(vert_attrs, t)) {
-                    prism::tet::logger().debug("<<<< Validity");
-                    return rollback();
-                }
-            }
+            auto old_tets = std::vector<Vec4i>(tet_nb.size());
+            for (auto i = 0; i < tet_nb.size(); i++) old_tets[i] = tet_attrs[tet_nb[i]].conn;
+            if (!common_tet_checkers(10., vert_attrs, tet_attrs, old_tets, old_tets, size_control))
+                return rollback();
+
 
             if (pv0 != -1) { // boundary, shell attempt
                 pc->base[pv0] += std::get<0>(new_directions);
@@ -913,12 +906,14 @@ bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc)
     return true;
 }
 
-auto common_tet_checkers = [](double quality_threshold,
-                              auto& vert_attrs,
-                              auto& tet_attrs,
-                              auto& old_tets,
-                              auto& new_tets,
-                              double size_control) {
+bool common_tet_checkers(
+    double quality_threshold,
+    const prism::tet::vert_info_t& vert_attrs,
+    const prism::tet::tet_info_t& tet_attrs,
+    const std::vector<Vec4i>& old_tets,
+    const std::vector<Vec4i>& new_tets,
+    double size_control)
+{
     auto before_quality = compute_quality(vert_attrs, old_tets);
     auto after_quality = compute_quality(vert_attrs, new_tets);
     if (after_quality > quality_threshold && before_quality < after_quality) {

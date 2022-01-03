@@ -74,14 +74,14 @@ TEST_CASE("sphere-coarsen-aggresive")
     REQUIRE(prism::tet::tetmesh_sanity(tetmesh, pc.get()));
     spdlog::enable_backtrace(100);
     for (auto i = 0; i < 5; i++) {
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, sizing);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         option.target_adjustment.resize(pc->mid.size());
         // collapse_pass(&pc, option, tetmesh, sizing);
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
         // collapse_pass(&pc, option, tetmesh, sizing);
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, sizing);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
         prism::tet::compact_tetmesh(tetmesh, pc.get());
         option.target_adjustment.resize(pc->mid.size());
     }
@@ -177,14 +177,14 @@ TEST_CASE("graded-sphere")
     for (auto i = 0; i < 10; i++) {
         prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4 / 3.);
         saver(i, "split");
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
         saver(i, "smooth");
         swapper();
         saver(i, "swap");
         print_snap_progress();
         prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
         saver(i, "dof");
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
         saver(i, "smooth2");
         print_snap_progress();
         prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
@@ -197,7 +197,7 @@ TEST_CASE("graded-sphere")
     option.collapse_quality_threshold = 8;
     for (auto i = 0; i < 5; i++) {
         prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4 / 3.);
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 1e-1);
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 1e-1);
         prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
         prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
         collapse_pass(pc.get(), option, tetmesh, sizer.get());
@@ -222,35 +222,32 @@ TEST_CASE("strict-size")
     auto improves_quality = [&, &tetmesh = tetmesh]() {
         edge_split_pass_for_dof(pc.get(), option, tetmesh);
         option.collapse_quality_threshold = -1;
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
-        option.collapse_quality_threshold = 20; // aggressive
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, 0.1);
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
+        option.collapse_quality_threshold = 8;
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, sizer.get(), 0.1);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, sizer.get());
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, sizer.get());
     };
-    for (auto i = 0; i < 3; i++) {
-        auto spl = prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 1.);
-        spdlog::info("Splits {}", spl);
-        auto stats = prism::tet::size_progress(sizer.get(), tetmesh);
+    auto print_size_progress = [&](){
+auto stats = prism::tet::size_progress(sizer.get(), tetmesh);
         spdlog::info(
             "Progress: Volume {}. Over {}. OverOver {}  LogError {}",
             stats[2],
             stats[0] / stats[2],
             stats[1] / stats[2],
             stats[3]);
+    };
+    for (auto i = 0; i < 3; i++) {
+        auto spl =
+            prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 1.);
+        spdlog::info("Splits {}", spl);
+        print_size_progress();
+        
     }
     prism::tet::serializer("../buildr/split-satisfy.h5", pc.get(), tetmesh);
-    for (auto i=0; i<3; i++) {
-    prism::tet::edgeswap_pass(pc.get(), option, tetmesh, sizer.get());
-    prism::tet::faceswap_pass(pc.get(), option, tetmesh, sizer.get());
-    prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
-    auto stats = prism::tet::size_progress(sizer.get(), tetmesh);
-    spdlog::info(
-        "(Col) Progress: Volume {}. Over {}. OverOver {}  LogError {}",
-        stats[2],
-        stats[0] / stats[2],
-        stats[1] / stats[2],
-        stats[3]);
+    for (auto i = 0; i < 3; i++) {
+        improves_quality();
+        print_size_progress();
     }
     prism::tet::serializer("../buildr/strict-size.h5", pc.get(), tetmesh);
 }

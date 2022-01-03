@@ -29,6 +29,20 @@ double size_constraint(
     return size_con;
 }
 
+double minimum_sizing_in_neighbor(
+    const prism::tet::vert_info_t& vert_info,
+    const prism::tet::tet_info_t& tet_info,
+    const prism::tet::SizeController* sizer,
+    const std::vector<int>& affected)
+{
+    auto sizing2 = 1.0;
+    if (sizer != nullptr)
+        for (auto t : affected) {
+            auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
+            sizing2 = std::min(t_size, sizing2);
+        }
+    return sizing2;
+};
 
 std::vector<double> size_progress(
     const prism::tet::SizeController* sizer,
@@ -56,12 +70,12 @@ std::vector<double> size_progress(
         total_vol += vol;
         if (diam2 > size_con) { // violate
             violating_vol += vol;
-            integral += vol*log(diam2 / size_con);
+            integral += vol * log(diam2 / size_con);
         }
-        if (diam2 > size_con * 4/3) violating_vol_4_3 += vol;
+        if (diam2 > size_con * 4 / 3) violating_vol_4_3 += vol;
     }
-    stats = {violating_vol, violating_vol_4_3, total_vol, integral/total_vol};
-    return stats;//std::pair(violating_vol, total_vol);
+    stats = {violating_vol, violating_vol_4_3, total_vol, integral / total_vol};
+    return stats; // std::pair(violating_vol, total_vol);
 }
 
 
@@ -149,24 +163,18 @@ int faceswap_pass(
     while (!face_queue.empty()) {
         auto [len, v0, v1, v2] = face_queue.top();
         face_queue.pop();
-        auto sizing2 = 1.0;
 
-        if (sizer != nullptr) {
-            auto& nb0 = vert_tet_conn[v0];
-            auto& nb1 = vert_tet_conn[v1];
-            auto& nb2 = vert_tet_conn[v2];
-            auto inter0_1 = set_inter(nb0, nb1);
-            auto affected = set_inter(inter0_1, nb2);
+        auto& nb0 = vert_tet_conn[v0];
+        auto& nb1 = vert_tet_conn[v1];
+        auto& nb2 = vert_tet_conn[v2];
+        auto inter0_1 = set_inter(nb0, nb1);
+        auto affected = set_inter(inter0_1, nb2);
 
 
-            if (affected.size() != 2) { // has to be on boundary, or an invalid face input.
-                continue;
-            }
-            for (auto t : affected) {
-                auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
-                sizing2 = std::min(t_size, sizing2);
-            }
+        if (affected.size() != 2) { // has to be on boundary, or an invalid face input.
+            continue;
         }
+        auto sizing2 = minimum_sizing_in_neighbor(vert_info, tet_info, sizer, affected);
 
         auto flag = prism::tet::swap_face(
             pc,
@@ -199,20 +207,14 @@ int edgeswap_pass(
         edge_queue.pop();
         auto bnd_faces = edge_adjacent_boundary_face(tet_info, vert_tet_conn, v0, v1);
         auto flag = false;
-        auto sizing2 = 1.0;
 
-        if (sizer != nullptr) {
-            auto& nb0 = vert_tet_conn[v0];
-            auto& nb1 = vert_tet_conn[v1];
-            auto affected = set_inter(nb0, nb1);
-            if (affected.size() != 3 && bnd_faces.empty()) { // not on boundary. AND
-                continue;
-            }
-            for (auto t : affected) {
-                auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
-                sizing2 = std::min(t_size, sizing2);
-            }
+        auto& nb0 = vert_tet_conn[v0];
+        auto& nb1 = vert_tet_conn[v1];
+        auto affected = set_inter(nb0, nb1);
+        if (affected.size() != 3 && bnd_faces.empty()) { // not on boundary. AND
+            continue;
         }
+        auto sizing2 = minimum_sizing_in_neighbor(vert_info, tet_info, sizer, affected);
 
         if (bnd_faces.empty())
             flag = prism::tet::swap_edge(
@@ -325,17 +327,11 @@ int collapse_pass(
         if (-(vert_info[v0].pos - vert_info[v1].pos).squaredNorm() != len) continue;
         if (previous[0] == v0 && previous[1] == v1) continue;
 
-        auto sizing2 = 1.0;
-        {
-            auto& affected = vert_tet_conn[v0];
-            if (affected.empty()) continue;
-            for (auto t : affected) {
-                auto t_size = size_constraint(vert_info, tet_info[t].conn, sizer);
-                sizing2 = std::min(t_size, sizing2);
-            }
-            if (std::abs(len) >= 0.8 * 0.8 * sizing2) continue; // only collapse over-short edges.
-            // spdlog::info("sizing {}, {}", len, sizing);
-        }
+        auto& affected = vert_tet_conn[v0];
+        if (affected.empty()) continue;
+        auto sizing2 = minimum_sizing_in_neighbor(vert_info, tet_info, sizer, affected);
+        if (std::abs(len) >= 0.8 * 0.8 * sizing2) continue; // only collapse over-short edges.
+        // spdlog::info("sizing {}, {}", len, sizing);
         previous = {v0, v1};
         // erase v0
         auto pv0 = vert_info[v0].mid_id;
@@ -383,6 +379,7 @@ int vertexsmooth_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
+    const prism::tet::SizeController* sizer,
     double thick)
 {
     auto& [vert_info, tet_info, vert_tet_conn] = tetmesh;
@@ -392,6 +389,7 @@ int vertexsmooth_pass(
         auto& nb = vert_tet_conn[v0];
         if (nb.empty()) continue;
         total_cnt++;
+        auto sizing2 = minimum_sizing_in_neighbor(vert_info, tet_info, sizer, nb);
         auto smooth_types =
             std::vector<prism::tet::SmoothType>{prism::tet::SmoothType::kInteriorNewton};
         if (vert_info[v0].mid_id != -1)

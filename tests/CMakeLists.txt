@@ -41,6 +41,7 @@ target_sources(prism_tests PRIVATE
                 remesh_shell_bin.cpp)
 
 target_sources(prism_tests PRIVATE
+                read_binary.cpp
                 tetra_opt.cpp
                 sizing_background_mesh.cpp
                 sphere_refine.cpp)

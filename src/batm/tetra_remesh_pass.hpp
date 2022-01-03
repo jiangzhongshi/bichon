@@ -51,6 +51,7 @@ int vertexsmooth_pass(
     PrismCage* pc,
     prism::local::RemeshOptions& option,
     prism::tet::tetmesh_t& tetmesh,
+    const prism::tet::SizeController* sizer,
     double thick);
 
 int edge_split_pass_for_dof(

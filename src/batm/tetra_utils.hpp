@@ -150,6 +150,14 @@ get_snap_position(const PrismCage& pc, const std::vector<int>& neighbor_pris, in
 
 std::tuple<Eigen::VectorXd, Eigen::VectorXd> snap_progress(const prism::tet::tetmesh_t& tetmesh, PrismCage* pc);
 
+bool common_tet_checkers(
+    double quality_threshold,
+    const prism::tet::vert_info_t& vert_attrs,
+    const prism::tet::tet_info_t& tet_attrs,
+    const std::vector<Vec4i>& old_tets,
+    const std::vector<Vec4i>& new_tets,
+    double size_control);
+
 bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc);
 } // namespace prism::tet
 
