@@ -145,7 +145,7 @@ TEST_CASE("graded-sphere")
     auto pc = std::make_shared<PrismCage>(filename);
     auto tetmesh = prism::tet::reload(filename, pc.get());
     prism::local::RemeshOptions option(pc->mid.size(), 0.1);
-    option.collapse_quality_threshold = 10;
+    option.collapse_quality_threshold = 8;
     option.distortion_bound = 1e-3;
     prism::tet::logger().enable_backtrace(100);
 
@@ -173,35 +173,6 @@ TEST_CASE("graded-sphere")
         auto integral = sqrt(dist2.dot(weight) / weight.sum());
         spdlog::info("Snap Progress::: INT {}, MAX {}, ", integral, sqrt(dist2.maxCoeff()));
     };
-    print_snap_progress();
-    for (auto i = 0; i < 10; i++) {
-        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 4 / 3.);
-        saver(i, "split");
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
-        saver(i, "smooth");
-        swapper();
-        saver(i, "swap");
-        print_snap_progress();
-        prism::tet::edge_split_pass_for_dof(pc.get(), option, tetmesh);
-        saver(i, "dof");
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
-        saver(i, "smooth2");
-        print_snap_progress();
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get());
-        swapper();
-        saver(i, "swap2");
-        prism::tet::compact_tetmesh(tetmesh, pc.get());
-        saver(i, "collapse");
-    }
-    auto improves_quality = [&, &tetmesh = tetmesh]() {
-        edge_split_pass_for_dof(pc.get(), option, tetmesh);
-        option.collapse_quality_threshold = -1;
-        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
-        option.collapse_quality_threshold = 8;
-        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, sizer.get(), 0.1);
-        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, sizer.get());
-        prism::tet::faceswap_pass(pc.get(), option, tetmesh, sizer.get());
-    };
     auto print_size_progress = [&]() {
         auto stats = prism::tet::size_progress(sizer.get(), tetmesh);
         spdlog::info(
@@ -211,13 +182,45 @@ TEST_CASE("graded-sphere")
             stats[1] / stats[2],
             stats[3]);
     };
-    for (auto i = 0; i < 3; i++) {
-        auto spl =
+    print_snap_progress();
+
+    auto improves_quality = [&, &tetmesh = tetmesh]() {
+        edge_split_pass_for_dof(pc.get(), option, tetmesh);
+        option.collapse_quality_threshold = -1;
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
+        option.collapse_quality_threshold = 8;
+        prism::tet::vertexsmooth_pass(pc.get(), option, tetmesh, nullptr, 0.1);
+        prism::tet::edgeswap_pass(pc.get(), option, tetmesh, nullptr);
+        prism::tet::faceswap_pass(pc.get(), option, tetmesh, nullptr);
+    };
+
+    for (auto i = 0; i < 10; i++) {
+        prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 1.);
+        print_size_progress();
+        saver(i, "split");
+        improves_quality();
+        saver(i, "qual");
+        swapper();
+        saver(i, "swap");
+        print_snap_progress();
+        improves_quality();
+        saver(i, "qual2");
+        print_snap_progress();
+        prism::tet::collapse_pass(pc.get(), option, tetmesh, sizer.get(), true);
+        swapper();
+        saver(i, "swap2");
+        prism::tet::compact_tetmesh(tetmesh, pc.get());
+        saver(i, "collapse");
+    }
+    
+
+    auto num_split = 1;
+    while (num_split > 0) {
+        num_split =
             prism::tet::edge_split_pass_with_sizer(pc.get(), option, tetmesh, sizer.get(), 1.);
-        spdlog::info("Splits {}", spl);
+        spdlog::info("Splits {}", num_split);
         print_size_progress();
     }
-    saver(10, "split-satisfy");
     for (auto i = 0; i < 3; i++) {
         improves_quality();
         print_size_progress();
@@ -301,6 +304,6 @@ TEST_CASE("shell-only")
     pc->serialize("../buildr/after_collapse.h5");
 }
 
-TEST_CASE("surface-based-refinemnet") {
-     // only check size if on surface.
-}
+// TEST_CASE("surface-based-refinemnet") {
+//      // only check size if on surface.
+// }
