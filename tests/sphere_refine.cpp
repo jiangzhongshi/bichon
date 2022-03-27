@@ -303,7 +303,3 @@ TEST_CASE("shell-only")
     prism::local::wildcollapse_pass(*pc, option);
     pc->serialize("../buildr/after_collapse.h5");
 }
-
-// TEST_CASE("surface-based-refinemnet") {
-//      // only check size if on surface.
-// }
