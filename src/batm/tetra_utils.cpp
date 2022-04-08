@@ -7,6 +7,7 @@
 #include <prism/spatial-hash/AABB_hash.hpp>
 #include "AMIPS.h"
 #include "prism/cgal/triangle_triangle_intersection.hpp"
+#include "prism/common.hpp"
 #include "prism/energy/smoother_pillar.hpp"
 #include "tetra_logger.hpp"
 
@@ -377,6 +378,47 @@ void update_tetra_conn(
     }
 }
 
+bool split_face(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
+    int v2)
+{
+    auto& nb0 = vert_conn[v0];
+    auto& nb1 = vert_conn[v1];
+    auto& nb2 = vert_conn[v2];
+    auto inter01 = set_inter(nb0, nb1);
+    auto affected = set_inter(inter01, nb2);
+    if (affected.empty()) return false; // invalid face
+    assert(affected.size() == 2);
+
+    prism::tet::logger().debug(">>> Splitting Face {} {}", v0, v1, v2);
+    const auto vx = vert_attrs.size();
+
+    std::vector<Vec4i> new_tets;
+    for (auto t : affected) {
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v0, vx);
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v1, vx);
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v2, vx);
+    }
+    assert(new_tets.size() == 6);
+
+    vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos + vert_attrs[v2].pos) / 2)});
+
+    auto rollback = [&]() {
+        vert_attrs.pop_back();
+        return false;
+    };
+    
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+
+    return true;
+}
 
 bool split_edge(
     PrismCage* pc,
@@ -1251,6 +1293,32 @@ bool swap_face(
 
     if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control))
         return false;
+
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+    return true;
+}
+
+bool divide_tetra(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int t0,
+    const Vec3d& p)
+{
+    auto affected = std::vector<int>{t0};
+    auto ux = vert_attrs.size();
+    //
+    auto new_tets = std::vector<Vec4i>{
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn};
+    for (auto i = 0; i < 4; i++) new_tets[i][i] = ux;
+
+    vert_attrs.push_back({{p}});
+
+    // if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control))
+    // return false;
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
     return true;

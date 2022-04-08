@@ -94,6 +94,14 @@ bool split_edge(
     int v0,
     int v1);
 
+bool split_face(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
+    int v2);
+
 bool smooth_vertex(
     PrismCage* pc,
     const prism::local::RemeshOptions& option,
@@ -144,6 +152,13 @@ bool flip_edge_sf(
     int v0,
     int v1,
     double size_control);
+
+bool divide_tetra(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int t_id,
+    const Vec3d& p);
 
 void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc = nullptr);
 

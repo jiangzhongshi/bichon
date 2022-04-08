@@ -15,6 +15,14 @@ cmake_policy(SET CMP0069 NEW)
 
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+add_compile_options (-fdiagnostics-color=always)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+add_compile_options (-fcolor-diagnostics)
+endif ()
+
+
 add_subdirectory(src)
 
 option(PRISM_TESTS "Unit Tests" ON)
