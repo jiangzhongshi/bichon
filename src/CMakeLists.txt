@@ -76,6 +76,7 @@ if (PRISM_ENABLE_ASAN)
 endif()
 
 add_library(batm_library
+          batm/surface_insert.cpp
           batm/tetra_utils.cpp
           batm/tetra_logger.cpp
           batm/tetra_quality.cpp
@@ -84,7 +85,7 @@ add_library(batm_library
           batm/AMIPS.cpp
           )
 target_compile_features(batm_library PUBLIC cxx_std_17)
-target_link_libraries(batm_library PUBLIC prism_library)
+target_link_libraries(batm_library PUBLIC prism_library wildmeshing_toolkit cvc3_rational)
 target_include_directories(batm_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/)
 
 

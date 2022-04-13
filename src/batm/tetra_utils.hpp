@@ -1,7 +1,10 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <prism/common.hpp>
+
+#include <Rational.h>
 
 
 struct PrismCage;
@@ -40,13 +43,18 @@ struct SizeController
 struct TetAttr
 {
     Vec4i conn = {{-1, -1, -1, -1}};
-    Vec4i prism_id = {{-1, -1, -1, -1}}; /**The prism cell id for each face.*/
+    Vec4i prism_id = {{-1, -1, -1, -1}};
+    std::array<std::set<int>, 4> track_prisms;
     bool is_removed = false;
 };
 
+using Vector3r = Eigen::Matrix<triwild::Rational, 1, 3>;
+using Vector2r = Eigen::Matrix<triwild::Rational, 1, 2>;
 struct VertAttr
 {
     Vec3d pos = Vec3d::Zero();
+    Vector3r pos_r = Vector3r::Zero();
+    bool rounded = true;
     int mid_id = -1; /**Points to the vertex id in the shell*/
 };
 
@@ -94,13 +102,6 @@ bool split_edge(
     int v0,
     int v1);
 
-bool split_face(
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn,
-    int v0,
-    int v1,
-    int v2);
 
 bool smooth_vertex(
     PrismCage* pc,
@@ -153,13 +154,6 @@ bool flip_edge_sf(
     int v1,
     double size_control);
 
-bool divide_tetra(
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn,
-    int t_id,
-    const Vec3d& p);
-
 void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc = nullptr);
 
 std::optional<Vec3d>
@@ -181,10 +175,40 @@ bool tetmesh_sanity(const prism::tet::tetmesh_t& tetmesh, const PrismCage* pc);
 } // namespace prism::tet
 
 namespace prism::tet {
-[[deprecated]] double
-circumradi2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 double diameter2(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 bool tetra_validity(const prism::tet::vert_info_t& vert_attrs, const Vec4i& t);
 double tetra_quality(const Vec3d& p0, const Vec3d& p1, const Vec3d& p2, const Vec3d& p3);
 Vec3d newton_position_from_stack(std::vector<std::array<double, 12>>& assembles);
 } // namespace prism::tet
+
+namespace prism::tet::sec {
+// section tetmesh, surface insertion related utils
+
+bool divide_tetra(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int t_id,
+    const Vec3d& p);
+
+bool split_edge(
+    prism::tet::vert_info_t& vert_attrs,
+    prism::tet::tet_info_t& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1);
+
+bool split_face(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
+    int v2);
+
+bool round(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0);
+} // namespace prism::tet::sec

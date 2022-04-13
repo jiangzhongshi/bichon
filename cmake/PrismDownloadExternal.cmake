@@ -179,3 +179,11 @@ function(prism_download_tetshell)
 	URL_MD5 883156e9b404794eae7fb7070848cdec
 	)
 endfunction()
+
+
+function(prism_download_wmtk)
+	prism_download_project(wildmeshing_toolkit
+	GIT_REPOSITORY https://github.com/wildmeshing/wildmeshing-toolkit.git
+	GIT_TAG zhongshi/minor-fix
+	)
+endfunction()

@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-void abort_and_debug(std::string msg = "")
+[[noreturn]] void abort_and_debug(std::string msg = "")
 {
     prism::tet::logger().dump_backtrace();
     assert(false && msg.c_str());
@@ -378,47 +378,6 @@ void update_tetra_conn(
     }
 }
 
-bool split_face(
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn,
-    int v0,
-    int v1,
-    int v2)
-{
-    auto& nb0 = vert_conn[v0];
-    auto& nb1 = vert_conn[v1];
-    auto& nb2 = vert_conn[v2];
-    auto inter01 = set_inter(nb0, nb1);
-    auto affected = set_inter(inter01, nb2);
-    if (affected.empty()) return false; // invalid face
-    assert(affected.size() == 2);
-
-    prism::tet::logger().debug(">>> Splitting Face {} {}", v0, v1, v2);
-    const auto vx = vert_attrs.size();
-
-    std::vector<Vec4i> new_tets;
-    for (auto t : affected) {
-        new_tets.push_back(tet_attrs[t].conn);
-        replace(new_tets.back(), v0, vx);
-        new_tets.push_back(tet_attrs[t].conn);
-        replace(new_tets.back(), v1, vx);
-        new_tets.push_back(tet_attrs[t].conn);
-        replace(new_tets.back(), v2, vx);
-    }
-    assert(new_tets.size() == 6);
-
-    vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos + vert_attrs[v2].pos) / 2)});
-
-    auto rollback = [&]() {
-        vert_attrs.pop_back();
-        return false;
-    };
-    
-    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-
-    return true;
-}
 
 bool split_edge(
     PrismCage* pc,
@@ -1298,32 +1257,6 @@ bool swap_face(
     return true;
 }
 
-bool divide_tetra(
-    std::vector<VertAttr>& vert_attrs,
-    std::vector<TetAttr>& tet_attrs,
-    std::vector<std::vector<int>>& vert_conn,
-    int t0,
-    const Vec3d& p)
-{
-    auto affected = std::vector<int>{t0};
-    auto ux = vert_attrs.size();
-    //
-    auto new_tets = std::vector<Vec4i>{
-        tet_attrs[t0].conn,
-        tet_attrs[t0].conn,
-        tet_attrs[t0].conn,
-        tet_attrs[t0].conn};
-    for (auto i = 0; i < 4; i++) new_tets[i][i] = ux;
-
-    vert_attrs.push_back({{p}});
-
-    // if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control))
-    // return false;
-
-    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
-    return true;
-}
-
 
 void compact_tetmesh(prism::tet::tetmesh_t& tetmesh, PrismCage* pc)
 {
@@ -1514,3 +1447,148 @@ bool flip_edge_sf(
 
 
 } // namespace prism::tet
+
+namespace prism::tet::sec {
+bool divide_tetra(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int t0,
+    const Vec3d& p)
+{
+    auto affected = std::vector<int>{t0};
+    auto ux = vert_attrs.size();
+    //
+    auto new_tets = std::vector<Vec4i>{
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn,
+        tet_attrs[t0].conn};
+    for (auto i = 0; i < 4; i++) new_tets[i][i] = ux;
+
+    vert_attrs.push_back({{p}});
+
+    // if (!common_tet_checkers(-1., vert_attrs, tet_attrs, old_tets, new_tets, size_control))
+    // return false;
+
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+    return true;
+}
+
+bool split_face(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1,
+    int v2)
+{
+    auto& nb0 = vert_conn[v0];
+    auto& nb1 = vert_conn[v1];
+    auto& nb2 = vert_conn[v2];
+    auto inter01 = set_inter(nb0, nb1);
+    auto affected = set_inter(inter01, nb2);
+    if (affected.empty()) return false; // invalid face
+    assert(affected.size() == 2);
+
+    prism::tet::logger().debug(">>> Splitting Face {} {}", v0, v1, v2);
+    const auto vx = vert_attrs.size();
+
+    std::vector<Vec4i> new_tets;
+    for (auto t : affected) {
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v0, vx);
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v1, vx);
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v2, vx);
+    }
+    assert(new_tets.size() == 6);
+
+    vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos + vert_attrs[v2].pos) / 2)});
+
+    auto rollback = [&]() {
+        vert_attrs.pop_back();
+        return false;
+    };
+
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, {}, {});
+
+    return true;
+}
+
+bool split_edge(
+    std::vector<VertAttr>& vert_attrs,
+    std::vector<TetAttr>& tet_attrs,
+    std::vector<std::vector<int>>& vert_conn,
+    int v0,
+    int v1)
+{
+    auto& nb0 = vert_conn[v0];
+    auto& nb1 = vert_conn[v1];
+    auto affected = set_inter(nb0, nb1); // removed
+    if (affected.empty()) return false;
+    assert(!affected.empty());
+    prism::tet::logger().debug(">>> Splitting {} {}", v0, v1);
+    const auto vx = vert_attrs.size();
+
+    std::vector<Vec4i> new_tets;
+    for (auto t : affected) {
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v0, vx);
+        new_tets.push_back(tet_attrs[t].conn);
+        replace(new_tets.back(), v1, vx);
+    }
+
+    auto bnd_pris = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
+
+    vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2)});
+    prism::tet::logger()
+        .trace("{}& {} -> {}", vert_attrs[v0].pos, vert_attrs[v1].pos, vert_attrs.back().pos);
+    auto rollback = [&]() {
+        vert_attrs.pop_back();
+        return false;
+    };
+
+    auto minimum_edge = [&]() {
+        auto mini = 1.0;
+        auto local_edges =
+            std::array<std::array<int, 2>, 6>{{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+        for (auto conn : new_tets) {
+            for (auto [v0, v1] : local_edges) {
+                mini = std::min(
+                    mini,
+                    (vert_attrs[conn[v0]].pos - vert_attrs[conn[v1]].pos).squaredNorm());
+            }
+        }
+        return mini;
+    };
+    if (minimum_edge() < 1e-10) {
+        prism::tet::logger().debug("minimum edge too short");
+        return rollback();
+    }
+
+    for (auto t : new_tets) { // Vec4i
+        if (!tetra_validity(vert_attrs, t)) {
+            prism::tet::logger().debug("<<<< Split Fail with Tetra Validity");
+            return rollback();
+        }
+    }
+
+    std::vector<int> new_fid;
+    std::vector<Vec3i> moved_tris;
+
+
+    // prism::tet::logger().info("Created MinEdge {}", minimum_edge());
+
+    update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
+    assert([&]() -> bool {
+        auto vx = vert_conn.size() - 1;
+        prism::tet::logger().trace("vx {}", vx);
+        return true;
+    }());
+
+    return true;
+}
+
+} // namespace prism::tet::sec
