@@ -48,8 +48,8 @@ struct TetAttr
     bool is_removed = false;
 };
 
-using Vector3r = Eigen::Matrix<triwild::Rational, 1, 3>;
-using Vector2r = Eigen::Matrix<triwild::Rational, 1, 2>;
+using Vector3r = Eigen::Matrix<apps::Rational, 1, 3>;
+using Vector2r = Eigen::Matrix<apps::Rational, 1, 2>;
 struct VertAttr
 {
     Vec3d pos = Vec3d::Zero();

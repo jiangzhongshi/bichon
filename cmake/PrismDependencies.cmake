@@ -63,7 +63,7 @@ endfunction()
 
 
 if (NOT TARGET cvc3_rational)
-  prism_download_file(https://raw.githubusercontent.com/wildmeshing/fTetWild/master/src/external/Rational.h
+  prism_download_file(https://raw.githubusercontent.com/wildmeshing/wildmeshing-toolkit/main/app/tetwild/Rational.hpp
   ${PRISM_EXTERNAL}/rational/Rational.h)
   add_library(cvc3_rational INTERFACE)
   target_include_directories(cvc3_rational INTERFACE ${PRISM_EXTERNAL}/rational/)

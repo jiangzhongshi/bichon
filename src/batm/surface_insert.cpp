@@ -151,16 +151,14 @@ struct TetShell : public wmtk::TetMesh
 auto internal_insert_single_triangle(
     wmtk::TetMesh& m,
     std::vector<prism::tet::VertAttr>& m_vertex_attribute,
-    const std::vector<Eigen::Vector3d>& vertices,
     const std::array<size_t, 3>& face,
     std::vector<std::array<size_t, 3>>& marked_tet_faces)
 {
     auto vertex_pos_r = [&m_vertex_attribute](size_t i) { return m_vertex_attribute[i].pos_r; };
 
     const auto& [flag, intersected_tets, intersected_edges, intersected_pos] =
-        wmtk::triangle_insert_prepare_info<triwild::Rational>(
+        wmtk::triangle_insert_prepare_info<apps::Rational>(
             m,
-            vertices,
             face,
             marked_tet_faces, // output
             [](auto&) { return true; },
@@ -192,11 +190,13 @@ auto internal_insert_single_triangle(
             (m_vertex_attribute[vs[0]].pos_r + m_vertex_attribute[vs[1]].pos_r +
              m_vertex_attribute[vs[2]].pos_r + m_vertex_attribute[vs[3]].pos_r) /
             4;
+        m_vertex_attribute[vid].rounded = false;
     }
     assert(new_edge_vids.size() == intersected_pos.size());
 
     for (auto i = 0; i < intersected_pos.size(); i++) {
         m_vertex_attribute[new_edge_vids[i]].pos_r = intersected_pos[i];
+        m_vertex_attribute[new_edge_vids[i]].rounded = false;
     }
 
     return true;
@@ -206,31 +206,18 @@ auto internal_insert_single_triangle(
 #include <wmtk/utils/InsertTriangleUtils.hpp>
 
 void prism::tet::insert_triangles(
-    prism::tet::tetmesh_t& tetmesh,
+    wmtk::TetMesh& m,
+    std::vector<prism::tet::VertAttr>& tetv,
     const std::vector<std::array<size_t, 3>>& tris)
 {
     tbb::concurrent_vector<bool> is_matched;
     tbb::concurrent_map<std::array<size_t, 3>, std::vector<int>> tet_face_tags;
 
-    auto& [tetv, tett, vt] = tetmesh;
-    auto m = TetShell();
-    std::vector<std::array<size_t, 4>> tets(tett.size());
-    for (auto i = 0; i < tets.size(); i++) {
-        for (auto j = 0; j < 4; j++) tets[i][j] = tett[i].conn[j];
-    }
-
-    m.init(tetv.size(), tets);
-
-    std::vector<Eigen::Vector3d> verts(tetv.size());
-    for (auto i = 0; i < tetv.size(); i++) {
-        verts[i] = tetv[i].pos;
-        assert(tetv[i].rounded);
-    }
-
     for (auto i = 0; i < tris.size(); i++) {
         std::vector<std::array<size_t, 3>> marked_tet_faces;
-        auto success = internal_insert_single_triangle(m, tetv, verts, tris[i], marked_tet_faces);
+        auto success = internal_insert_single_triangle(m, tetv, tris[i], marked_tet_faces);
         if (!success) continue;
+        spdlog::info("success");
         for (auto& f : marked_tet_faces) tet_face_tags[f].push_back(i);
     }
 }

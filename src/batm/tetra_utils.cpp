@@ -1540,7 +1540,6 @@ bool split_edge(
         replace(new_tets.back(), v1, vx);
     }
 
-    auto bnd_pris = edge_adjacent_boundary_face(tet_attrs, vert_conn, v0, v1);
 
     vert_attrs.push_back({((vert_attrs[v0].pos + vert_attrs[v1].pos) / 2)});
     prism::tet::logger()
@@ -1577,9 +1576,6 @@ bool split_edge(
 
     std::vector<int> new_fid;
     std::vector<Vec3i> moved_tris;
-
-
-    // prism::tet::logger().info("Created MinEdge {}", minimum_edge());
 
     update_tetra_conn(vert_attrs, tet_attrs, vert_conn, affected, new_tets, new_fid, moved_tris);
     assert([&]() -> bool {

@@ -16,6 +16,7 @@
 #include "prism/cage_check.hpp"
 #include "prism/predicates/inside_prism_tetra.hpp"
 #include "spdlog/common.h"
+#include "wmtk/TetMesh.h"
 
 #include <igl/barycenter.h>
 #include <igl/predicates/predicates.h>
@@ -92,4 +93,27 @@ TEST_CASE("insert-surface")
     auto bgT = H5Easy::load<RowMati>(file, "tet_t");
 
     auto tree = prism::geogram::AABB_tet(bgV, bgT);
+
+    auto tetmesh =
+        prism::tet::prepare_tet_info(nullptr, bgV, bgT, Eigen::VectorXi::Constant(bgV.rows(), -1));
+
+
+    std::vector<prism::tet::VertAttr> tetv;
+
+    auto m = wmtk::TetMesh();
+    std::vector<std::array<size_t, 4>> tets(bgT.rows());
+    for (auto i = 0; i < tets.size(); i++) {
+        for (auto j = 0; j < 4; j++) tets[i][j] = bgT(i, j);
+    }
+
+    m.init(bgV.rows(), tets);
+
+    spdlog::info("num v {} num t {}", bgV.rows(), bgT.rows());
+    prism::tet::insert_triangles(tetmesh, {{0, 1, 2}});
+    spdlog::info("num v {} num t {}", bgV.rows(), bgT.rows());
+}
+
+TEST_CASE("oop")
+{
+
 }
