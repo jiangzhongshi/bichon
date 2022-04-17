@@ -112,8 +112,3 @@ TEST_CASE("insert-surface")
     prism::tet::insert_triangles(tetmesh, {{0, 1, 2}});
     spdlog::info("num v {} num t {}", bgV.rows(), bgT.rows());
 }
-
-TEST_CASE("oop")
-{
-
-}
