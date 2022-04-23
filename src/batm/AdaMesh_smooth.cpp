@@ -77,16 +77,16 @@ bool AdaMesh::round(size_t i)
     auto& m_vertex_attribute = vertex_attrs;
     if (m_vertex_attribute[i].rounded) return true;
 
-    auto old_pos = m_vertex_attribute[i].pos_r;
-    m_vertex_attribute[i].pos_r << m_vertex_attribute[i].pos[0], m_vertex_attribute[i].pos[1],
-        m_vertex_attribute[i].pos[2];
+    auto old_pos = m_vertex_attribute[i].m_posr;
+    m_vertex_attribute[i].m_posr << m_vertex_attribute[i].m_posf[0], m_vertex_attribute[i].m_posf[1],
+        m_vertex_attribute[i].m_posf[2];
 
     auto conn_tets = get_one_ring_tets_for_vertex(v);
     m_vertex_attribute[i].rounded = true;
     for (auto& tet : conn_tets) {
         if (is_invert(tet)) {
             m_vertex_attribute[i].rounded = false;
-            m_vertex_attribute[i].pos_r = old_pos;
+            m_vertex_attribute[i].m_posr = old_pos;
             return false;
         }
     }
@@ -94,7 +94,7 @@ bool AdaMesh::round(size_t i)
     return true;
 }
 
-bool AdaMesh::is_invert(const Tuple& t)
+bool AdaMesh::is_invert(const Tuple& t) const
 {
     auto& m = *this;
     if (!t.is_valid(m)) return false;
@@ -102,7 +102,7 @@ bool AdaMesh::is_invert(const Tuple& t)
     return true;
 }
 
-double AdaMesh::quality(const Tuple& t)
+double AdaMesh::quality(const Tuple& t) const
 {
     auto vs = oriented_tet_vids(t);
     auto rational_energy_compute = [&vertex_attrs = vertex_attrs](auto& vs) {
@@ -110,7 +110,7 @@ double AdaMesh::quality(const Tuple& t)
         for (auto j = 0; j < 4; j++) {
             auto& va = vertex_attrs[vs[j]];
             for (auto k = 0; k < 3; k++) {
-                T[j * 3 + k] = va.pos_r[k];
+                T[j * 3 + k] = va.m_posr[k];
             }
         }
         return wmtk::AMIPS_energy_rational_p3<apps::Rational, apps::Rational>(T);
@@ -125,7 +125,7 @@ double AdaMesh::quality(const Tuple& t)
             break;
         }
         for (auto k = 0; k < 3; k++) {
-            T[j * 3 + k] = va.pos[k];
+            T[j * 3 + k] = va.m_posf[k];
         }
     }
 
@@ -137,15 +137,18 @@ double AdaMesh::quality(const Tuple& t)
 struct Split : public wmtk::SplitEdge
 {
     std::map<std::array<size_t, 3>, AdaMesh::FaceAttributes> cache_changed_faces;
-    AdaMesh::FaceAttCol& m_face_attribute;
+    AdaMesh::VertAttCol* vertex_attrs = nullptr;
+    AdaMesh::FaceAttCol* face_attrs = nullptr;
 
-    Split(const TetMesh& m_, AdaMesh::FaceAttCol& attr_)
+    Split(const TetMesh& m_, AdaMesh::VertAttCol& v_attr, AdaMesh::FaceAttCol& f_attr)
         : wmtk::SplitEdge(m_)
-        , m_face_attribute(attr_){};
+        , vertex_attrs(&v_attr)
+        , face_attrs(&f_attr){};
 
     bool before(const wmtk::TetMesh::Tuple& tup)
     {
         auto& m = static_cast<const AdaMesh&>(this->m);
+
         auto incident_tets = m.get_incident_tets_for_edge(tup);
         cache_changed_faces.clear();
         for (auto t : incident_tets) {
@@ -162,11 +165,8 @@ struct Split : public wmtk::SplitEdge
         return true;
     };
 
-    bool after(const std::vector<wmtk::TetMesh::Tuple>& new_tets)
+    void face_updater(const std::vector<wmtk::TetMesh::Tuple>& new_tets)
     {
-        auto& m = static_cast<const AdaMesh&>(this->m);
-        auto v1 = edge_verts[0];
-        auto v2 = edge_verts[1];
         // if same face, then inherit,
         for (auto t : new_tets) {
             for (auto j = 0; j < 4; j++) {
@@ -195,11 +195,59 @@ struct Split : public wmtk::SplitEdge
                 std::sort(vids.begin(), vids.end());
                 auto it = (cache_changed_faces.find(vids));
                 if (it != cache_changed_faces.end()) {
-                    m_face_attribute[global_fid] = it->second;
+                    (*face_attrs)[global_fid] = it->second;
                 }
             }
         }
-        // TODO, some need clear?
+        // TODO, some entries of m_face_attribute need clear?
+    }
+    void vert_updater(const AdaMesh& m, const std::vector<wmtk::TetMesh::Tuple>& new_tets)
+    {
+        auto& m_vertex_attribute = *vertex_attrs;
+
+        auto v1_id = edge_verts[0];
+        auto v2_id = edge_verts[1];
+        auto v_id = ux;
+        /// check inversion & rounding
+        m_vertex_attribute[v_id].m_posf =
+            (m_vertex_attribute[v1_id].m_posf + m_vertex_attribute[v2_id].m_posf) / 2;
+        m_vertex_attribute[v_id].rounded = true;
+
+        for (auto& loc : new_tets) {
+            if (m.is_invert(loc)) {
+                m_vertex_attribute[v_id].rounded = false;
+                break;
+            }
+        }
+        if (!m_vertex_attribute[v_id].rounded) {
+            m_vertex_attribute[v_id].m_posr =
+                (m_vertex_attribute[v1_id].m_posr + m_vertex_attribute[v2_id].m_posr) / 2;
+            m_vertex_attribute[v_id].m_posf = to_double(m_vertex_attribute[v_id].m_posr);
+        } else
+            m_vertex_attribute[v_id].m_posr = to_rational(m_vertex_attribute[v_id].m_posf);
+
+
+        /// update vertex attribute
+        // bbox
+        m_vertex_attribute[v_id].on_bbox_faces = wmtk::set_intersection(
+            m_vertex_attribute[v1_id].on_bbox_faces,
+            m_vertex_attribute[v2_id].on_bbox_faces);
+        // surface
+        m_vertex_attribute[v_id].m_is_on_surface = split_cache.local().is_edge_on_surface;
+    }
+    bool after(const std::vector<wmtk::TetMesh::Tuple>& new_tets)
+    {
+        auto& m = static_cast<const AdaMesh&>(this->m);
+
+        vert_updater(m, new_tets);
+
+        face_updater(new_tets);
+
+        /// update quality
+        for (auto& loc : new_tets) {
+            // m.tet_attrs[loc.tid(m)].m_quality = get_quality(loc);
+        }
+
         return true;
     }
 };

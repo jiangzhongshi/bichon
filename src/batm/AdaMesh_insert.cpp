@@ -30,19 +30,19 @@ auto degenerate_config =
     using GEO::PCK::points_are_colinear_3d;
     std::array<bool, 4> colinear{false, false, false, false};
     for (auto i = 0; i < 4; i++) {
-        if (pt == tetv[tet[i]].pos) return {int(tet[i]), -1, -1}; // vertex
+        if (pt == tetv[tet[i]].m_posf) return {int(tet[i]), -1, -1}; // vertex
     }
     for (auto i = 0; i < 4; i++) {
         if (orient_3d(
                 pt.data(),
-                tetv[tet[(i + 1) % 4]].pos.data(),
-                tetv[tet[(i + 2) % 4]].pos.data(),
-                tetv[tet[(i + 3) % 4]].pos.data()) == 0) {
+                tetv[tet[(i + 1) % 4]].m_posf.data(),
+                tetv[tet[(i + 2) % 4]].m_posf.data(),
+                tetv[tet[(i + 3) % 4]].m_posf.data()) == 0) {
             for (auto j = 0; j < 3; j++) {
                 if (points_are_colinear_3d(
                         pt.data(),
-                        tetv[tet[(i + 1 + j) % 4]].pos.data(),
-                        tetv[tet[(i + 1 + (j + 1) % 3) % 4]].pos.data()))
+                        tetv[tet[(i + 1 + j) % 4]].m_posf.data(),
+                        tetv[tet[(i + 1 + (j + 1) % 3) % 4]].m_posf.data()))
                     return {
                         (int)tet[(i + 1 + j) % 4],
                         (int)tet[(i + 1 + (j + 1) % 3) % 4],
@@ -61,7 +61,7 @@ auto internal_insert_single_triangle(
     const std::array<size_t, 3>& face,
     std::vector<std::array<size_t, 3>>& marked_tet_faces)
 {
-    auto vertex_pos_r = [&vertex_attrs](size_t i) { return vertex_attrs[i].pos_r; };
+    auto vertex_pos_r = [&vertex_attrs](size_t i) { return vertex_attrs[i].m_posr; };
 
     const auto& [flag, intersected_tets, intersected_edges, intersected_pos] =
         wmtk::triangle_insert_prepare_info<apps::Rational>(
@@ -93,15 +93,15 @@ auto internal_insert_single_triangle(
     for (auto i = 0; i < new_center_vids.size(); i++) {
         auto vid = new_center_vids[i];
         auto& vs = center_split_tets[i];
-        vertex_attrs[vid].pos_r = (vertex_attrs[vs[0]].pos_r + vertex_attrs[vs[1]].pos_r +
-                                   vertex_attrs[vs[2]].pos_r + vertex_attrs[vs[3]].pos_r) /
+        vertex_attrs[vid].m_posr = (vertex_attrs[vs[0]].m_posr + vertex_attrs[vs[1]].m_posr +
+                                   vertex_attrs[vs[2]].m_posr + vertex_attrs[vs[3]].m_posr) /
                                   4;
         vertex_attrs[vid].rounded = false;
     }
     assert(new_edge_vids.size() == intersected_pos.size());
 
     for (auto i = 0; i < intersected_pos.size(); i++) {
-        vertex_attrs[new_edge_vids[i]].pos_r = intersected_pos[i];
+        vertex_attrs[new_edge_vids[i]].m_posr = intersected_pos[i];
         vertex_attrs[new_edge_vids[i]].rounded = false;
     }
 
@@ -209,10 +209,10 @@ void AdaMesh::insert_all_points(const std::vector<Vec3d>& points, const std::vec
             auto vs = m.oriented_tet_vertices(m.tuple_from_tet(tid));
             if (::prism::predicates::point_in_tetrahedron(
                     pt,
-                    tetv[vs[0].vid(m)].pos,
-                    tetv[vs[1].vid(m)].pos,
-                    tetv[vs[2].vid(m)].pos,
-                    tetv[vs[3].vid(m)].pos))
+                    tetv[vs[0].vid(m)].m_posf,
+                    tetv[vs[1].vid(m)].m_posf,
+                    tetv[vs[2].vid(m)].m_posf,
+                    tetv[vs[3].vid(m)].m_posf))
                 return tid;
         } else {
             for (auto v : it->second) {
@@ -315,17 +315,17 @@ void AdaMesh::finalize_triangle_insertion(const std::vector<std::array<size_t, 3
         auto fids = i.second;
         if (fids.empty()) continue;
 
-        Vector3r c = (vertex_attrs[vids[0]].pos_r + vertex_attrs[vids[1]].pos_r +
-                      vertex_attrs[vids[2]].pos_r) /
+        Vector3r c = (vertex_attrs[vids[0]].m_posr + vertex_attrs[vids[1]].m_posr +
+                      vertex_attrs[vids[2]].m_posr) /
                      3;
 
         wmtk::vector_unique(fids);
 
         for (int input_fid : fids) {
             std::array<Vector3r, 3> tri = {
-                vertex_attrs[tris[input_fid][0]].pos_r,
-                vertex_attrs[tris[input_fid][1]].pos_r,
-                vertex_attrs[tris[input_fid][2]].pos_r};
+                vertex_attrs[tris[input_fid][0]].m_posr,
+                vertex_attrs[tris[input_fid][1]].m_posr,
+                vertex_attrs[tris[input_fid][2]].m_posr};
             if (projected_point_in_triangle(c, tri)) {
                 auto [_, global_tet_fid] = tuple_from_face(vids);
                 m_face_attribute[global_tet_fid].m_is_surface_fs = 1;
@@ -348,15 +348,15 @@ void AdaMesh::finalize_triangle_insertion(const std::vector<std::array<size_t, 3
         std::array<size_t, 3> vids = {{vs[0].vid(*this), vs[1].vid(*this), vs[2].vid(*this)}};
         int on_bbox = -1;
         for (int k = 0; k < 3; k++) {
-            if (vertex_attrs[vids[0]].pos_r[k] == m_params.box_min[k] &&
-                vertex_attrs[vids[1]].pos_r[k] == m_params.box_min[k] &&
-                vertex_attrs[vids[2]].pos_r[k] == m_params.box_min[k]) {
+            if (vertex_attrs[vids[0]].m_posr[k] == m_params.box_min[k] &&
+                vertex_attrs[vids[1]].m_posr[k] == m_params.box_min[k] &&
+                vertex_attrs[vids[2]].m_posr[k] == m_params.box_min[k]) {
                 on_bbox = k * 2;
                 break;
             }
-            if (vertex_attrs[vids[0]].pos_r[k] == m_params.box_max[k] &&
-                vertex_attrs[vids[1]].pos_r[k] == m_params.box_max[k] &&
-                vertex_attrs[vids[2]].pos_r[k] == m_params.box_max[k]) {
+            if (vertex_attrs[vids[0]].m_posr[k] == m_params.box_max[k] &&
+                vertex_attrs[vids[1]].m_posr[k] == m_params.box_max[k] &&
+                vertex_attrs[vids[2]].m_posr[k] == m_params.box_max[k]) {
                 on_bbox = k * 2 + 1;
                 break;
             }

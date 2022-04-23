@@ -15,20 +15,21 @@ struct AdaMesh : public wmtk::TetMesh
 {
     struct VertexAttributes
     {
-        Vec3d pos;
-        Vector3r pos_r = Vector3r::Zero();
+        Vec3d m_posf;
+        Vector3r m_posr = Vector3r::Zero();
         bool rounded = false;
         bool is_removed = false;
         bool m_is_on_surface = false;
         std::vector<int> on_bbox_faces;
+        VertexAttributes(){};
         VertexAttributes(const Vec3d& v)
-            : pos(v)
+            : m_posf(v)
             , rounded(true)
         {
-            for (auto i = 0; i < 3; i++) pos_r[i] = apps::Rational(v[i]);
+            for (auto i = 0; i < 3; i++) m_posr[i] = apps::Rational(v[i]);
         };
         VertexAttributes(const Vector3r& v)
-            : pos_r(v)
+            : m_posr(v)
             , rounded(false)
         {}
     };
@@ -80,8 +81,8 @@ public: // callbacks
 
 public:
     bool round(size_t vid);
-    bool is_invert(const Tuple& t);
-    double quality(const Tuple& t);
+    bool is_invert(const Tuple& t) const;
+    double quality(const Tuple& t) const;
 
     std::map<std::array<size_t, 3>, FaceAttributes> cache_changed_faces;
     void split_all_edges();
