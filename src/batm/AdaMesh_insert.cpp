@@ -10,6 +10,8 @@
 #include "wmtk/utils/GeoUtils.h"
 #include "wmtk/utils/InsertTriangleUtils.hpp"
 
+#include "wmtk/TetMeshOperations.hpp"
+
 auto replace = [](auto& arr, size_t a, size_t b) {
     for (auto i = 0; i < arr.size(); i++) {
         if (arr[i] == a) {
@@ -157,46 +159,6 @@ struct DivideTet : public TetMesh::OperationBuilder
 };
 
 
-struct SplitEdge : public TetMesh::OperationBuilder
-{
-    const AdaMesh& m;
-    std::vector<size_t> affected;
-    std::array<size_t, 2> edge_verts;
-    size_t ux;
-
-    SplitEdge(const AdaMesh& _m)
-        : m(_m)
-    {}
-    std::vector<size_t> removed_tids(const TetMesh::Tuple& t)
-    {
-        auto incidents = m.get_incident_tets_for_edge(t);
-        for (auto i : incidents) {
-            affected.push_back(i.tid(m));
-        }
-        edge_verts = {t.vid(m), t.switch_vertex(m).vid(m)};
-
-        return affected;
-    }
-    int request_vert_slots() { return 1; }
-    std::vector<std::array<size_t, 4>> replacing_tets(const std::vector<size_t>& slots)
-    {
-        assert(slots.size() == 1);
-        ux = slots.front();
-
-        auto new_tets = std::vector<std::array<size_t, 4>>();
-
-        new_tets.reserve(2 * affected.size());
-        for (auto i = 0; i < affected.size(); i++) {
-            auto t_conn = m.oriented_tet_vids(m.tuple_from_tet(affected[i]));
-            for (auto j = 0; j < 2; j++) {
-                new_tets.push_back(t_conn);
-                replace(new_tets.back(), edge_verts[j], ux);
-            }
-        }
-        return new_tets;
-    }
-};
-
 struct SplitFace : public TetMesh::OperationBuilder
 {
     const AdaMesh& m;
@@ -280,7 +242,7 @@ void AdaMesh::insert_all_points(const std::vector<Vec3d>& points, const std::vec
             } else if (config[2] == -1) {
                 // edge
                 auto tup = m.tuple_from_edge({(size_t)config[0], (size_t)config[1]});
-                SplitEdge spl_edge(m);
+                auto spl_edge = wmtk::SplitEdge(m);
                 auto suc = m.customized_operation(spl_edge, tup, new_tets);
 
                 for (auto j = 0; j < spl_edge.affected.size();
@@ -366,7 +328,7 @@ void AdaMesh::finalize_triangle_insertion(const std::vector<std::array<size_t, 3
                 vertex_attrs[tris[input_fid][2]].pos_r};
             if (projected_point_in_triangle(c, tri)) {
                 auto [_, global_tet_fid] = tuple_from_face(vids);
-                face_attrs[global_tet_fid].m_is_surface_fs = 1;
+                m_face_attribute[global_tet_fid].m_is_surface_fs = 1;
                 //
                 for (auto vid : vids) {
                     vertex_attrs[vid].m_is_on_surface = true;
@@ -401,7 +363,7 @@ void AdaMesh::finalize_triangle_insertion(const std::vector<std::array<size_t, 3
         }
         if (on_bbox < 0) continue;
         auto fid = faces[i].fid(*this);
-        face_attrs[fid].m_is_bbox_fs = on_bbox;
+        m_face_attribute[fid].m_is_bbox_fs = on_bbox;
         //
         for (size_t vid : vids) {
             vertex_attrs[vid].on_bbox_faces.push_back(on_bbox);
@@ -468,5 +430,6 @@ bool AdaMesh::triangle_insertion_after(const std::vector<std::vector<Tuple>>& ne
 
     return true;
 }
+
 
 } // namespace wmtk::prism

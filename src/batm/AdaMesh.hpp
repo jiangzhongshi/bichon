@@ -41,14 +41,21 @@ struct AdaMesh : public wmtk::TetMesh
     {
         std::set<int> track_prisms;
         bool m_is_surface_fs = false;
-        int m_is_bbox_fs;
+        int m_is_bbox_fs = -1;
+        int m_surface_tags = -1;
+        void reset()
+        {
+            m_is_surface_fs = false;
+            m_is_bbox_fs = -1;
+            m_surface_tags = -1;
+        }
     };
     using VertAttCol = wmtk::AttributeCollection<VertexAttributes>;
     VertAttCol vertex_attrs;
     using TetAttCol = wmtk::AttributeCollection<TetAttributes>;
     TetAttCol tet_attrs;
     using FaceAttCol = wmtk::AttributeCollection<FaceAttributes>;
-    FaceAttCol face_attrs;
+    FaceAttCol m_face_attribute;
 
 
 public:
@@ -70,9 +77,35 @@ public: // callbacks
     bool triangle_insertion_before(const std::vector<Tuple>& tup) override;
     bool triangle_insertion_after(const std::vector<std::vector<Tuple>>& new_faces) override;
     void finalize_triangle_insertion(const std::vector<std::array<size_t, 3>>& tris);
+
 public:
     bool round(size_t vid);
     bool is_invert(const Tuple& t);
     double quality(const Tuple& t);
+
+    std::map<std::array<size_t, 3>, FaceAttributes> cache_changed_faces;
+    void split_all_edges();
+    bool split_edge_before(const Tuple& t) override;
+    bool split_edge_after(const Tuple& loc) override;
+
+    void smooth_all_vertices();
+    bool smooth_before(const Tuple& t) override;
+    bool smooth_after(const Tuple& t) override;
+
+    void collapse_all_edges(bool is_limit_length = true);
+    bool collapse_edge_before(const Tuple& t) override;
+    bool collapse_edge_after(const Tuple& t) override;
+
+    void swap_all_edges_44();
+    bool swap_edge_44_before(const Tuple& t) override;
+    bool swap_edge_44_after(const Tuple& t) override;
+
+    void swap_all_edges();
+    bool swap_edge_before(const Tuple& t) override;
+    bool swap_edge_after(const Tuple& t) override;
+
+    void swap_all_faces();
+    bool swap_face_before(const Tuple& t) override;
+    bool swap_face_after(const Tuple& t) override;
 };
 } // namespace wmtk::prism
