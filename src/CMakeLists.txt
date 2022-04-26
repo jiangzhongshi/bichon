@@ -51,6 +51,7 @@ set_target_properties(prism_library PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(prism::prism ALIAS prism_library)
 
 
+if (NOT PRISM_LIB_ONLY)
 add_library(cumin_library
   cumin/tetshell_utils.cpp
   cumin/curve_utils.cpp
@@ -94,4 +95,5 @@ if (PYBICHON)
   prism_download_pybind11()
   add_subdirectory(${PRISM_EXTERNAL}/pybind11/ pybind11)
   add_subdirectory(python)
+endif()
 endif()
