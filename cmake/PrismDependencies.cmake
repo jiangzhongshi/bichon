@@ -84,7 +84,7 @@ if (NOT TARGET cvc3_rational)
 endif()
 
 if (NOT TARGET mitsuba_autodiff)
-  file(DOWNLOAD https://raw.githubusercontent.com/polyfem/polyfem/master/src/utils/autodiff.h
+  file(DOWNLOAD https://raw.githubusercontent.com/polyfem/polyfem/master/src/polyfem/utils/autodiff.h
   ${PRISM_EXTERNAL}/autodiff/autodiff_mitsuba.h)
   add_library(mitsuba_autodiff INTERFACE)
   target_include_directories(mitsuba_autodiff INTERFACE ${PRISM_EXTERNAL}/autodiff/)
