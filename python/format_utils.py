@@ -19,8 +19,10 @@ def convert_cutet(file1, file2):
        17, 18, 19])
     else:
         assert False, "only hard-coded P3 or P4 for now."
+    num = p4T.shape[1]
+    tag = f'tetra{num}'
     meshio.gmsh.write(file2,
-                 meshio.Mesh(points=lagr, cells=[('tetra35', p4T[:, reorder])]))
+                 meshio.Mesh(points=lagr, cells=[(tag, p4T[:, reorder])]))
 
 def codec_to_points(codec):
 
